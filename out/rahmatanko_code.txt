@@ -315,64 +315,75 @@ public:
 ==============================
 FILE: main.cpp
 ==============================
+#include "user/UserManager.h"
 #include <iostream>
-#include <vector>
-#include "market/MarketDataLoader.h"
 
-// this main file tests hourly, minutely, and secondly candlesticks
-int main()
-{
-    // path to the market csv
-    std::string csvFile = "data/small_market_data.csv";
+int main() {
+    // path to CSV file for testing
+    std::string userCSV = "data/users_test.csv";
 
-    // construct the loader (reads + stores all orders internally)
-    MarketDataLoader loader(csvFile);
+    // create the user manager, loads existing users if CSV exists
+    UserManager userManager(userCSV);
 
-    // product + order type to test with
-    std::string product = "ETH/BTC";
-    OrderBookType type = OrderBookType::ask;
+    // create a variable to hold the user object returned after registration/login
+    User testUser;
 
-    // define the three granularities we want to test
-    std::vector<Timeframe> timeframes = {
-        Timeframe::Hourly,
-        Timeframe::Minutely,
-        Timeframe::Secondly
-    };
-
-    // loop through each timeframe and print its candles
-    for (Timeframe tf : timeframes)
-    {
-        // compute candlesticks for this timeframe
-        std::vector<Candlestick> candles =
-            loader.computeCandlesticks(product, type, tf);
-
-        // quick sanity check
-        if (candles.empty())
-        {
-            std::cout << "no candlesticks for timeframe " << static_cast<int>(tf) << "\n";
-            continue;
-        }
-
-        // print a header for clarity
-        std::string label = (tf == Timeframe::Hourly) ? "hourly" :
-                            (tf == Timeframe::Minutely) ? "minutely" :
-                            "secondly";
-
-        std::cout << "\n--- " << label << " candlesticks ---\n";
-        std::cout << "date, open, high, low, close\n";
-
-        // loop through all candles for this timeframe
-        for (const Candlestick& c : candles)
-        {
-            std::cout << c.date << ", "
-                      << c.open << ", "
-                      << c.high << ", "
-                      << c.low << ", "
-                      << c.close << "\n";
+    // 1. check if the user already exists in CSV
+    std::vector<User> allUsers = userManager.getAllUsers();
+    bool userFound = false;
+    for (const auto& u : allUsers) {
+        if (u.getFullName() == "Alice Johnson" && u.getEmail() == "alice@example.com") {
+            testUser = u; // assign existing user
+            userFound = true;
+            break;
         }
     }
 
-    // done, all buckets printed
+    // 2. register the user if not found
+    if (!userFound) {
+        std::cout << "Registering new user...\n";
+        bool regSuccess = userManager.registerUser("Alice Johnson", "alice@example.com", "password123", testUser);
+        if (regSuccess) {
+            std::cout << "Registration successful!\n";
+            std::cout << "UserID: " << testUser.getUserID() << "\n";
+            std::cout << "WalletID: " << testUser.getWalletID() << "\n";
+        } else {
+            std::cout << "Registration failed (user may already exist)\n";
+        }
+    } else {
+        std::cout << "User already exists, using existing account.\n";
+        std::cout << "UserID: " << testUser.getUserID() << "\n";
+        std::cout << "WalletID: " << testUser.getWalletID() << "\n";
+    }
+
+    // 3. attempt login with correct credentials
+    std::cout << "\nLogging in with correct credentials...\n";
+    User loginUser;
+    bool loginSuccess = userManager.loginUser(testUser.getUserID(), "password123", loginUser);
+    if (loginSuccess) {
+        std::cout << "Login successful! Welcome " << loginUser.getFullName() << "\n";
+    } else {
+        std::cout << "Login failed with correct credentials (should not happen)\n";
+    }
+
+    // 4. attempt login with wrong password
+    std::cout << "\nLogging in with wrong password...\n";
+    User wrongLogin;
+    bool wrongPass = userManager.loginUser(testUser.getUserID(), "wrongpassword", wrongLogin);
+    if (!wrongPass) {
+        std::cout << "Login correctly failed with wrong password.\n";
+    }
+
+    // 5. display all users currently loaded
+    std::cout << "\nAll users in CSV:\n";
+    allUsers = userManager.getAllUsers(); // reload in case we just added a new user
+    for (const auto& u : allUsers) {
+        std::cout << "UserID: " << u.getUserID()
+                  << ", Name: " << u.getFullName()
+                  << ", Email: " << u.getEmail()
+                  << ", WalletID: " << u.getWalletID() << "\n";
+    }
+
     return 0;
 }
 
@@ -693,4 +704,245 @@ public:
     std::string product;     // product pair e.g. "ETH/USDT"
     OrderBookType orderType; // bid / ask / etc.
     std::string username;    // source of the order
+};
+
+==============================
+FILE: User.cpp
+==============================
+#include "User.h"
+#include <vector>
+
+// personal implementation
+
+// constructor just assigns all fields
+User::User(const std::string& fullName,
+           const std::string& email,
+           const std::string& hashedPassword,
+           const std::string& userID,
+           const std::string& walletID)
+    : fullName(fullName),
+      email(email),
+      hashedPassword(hashedPassword),
+      userID(userID),
+      walletID(walletID)
+{
+}
+
+// simple getters
+std::string User::getUserID() const { return userID; }
+std::string User::getFullName() const { return fullName; }
+std::string User::getEmail() const { return email; }
+std::string User::getHashedPassword() const { return hashedPassword; }
+std::string User::getWalletID() const { return walletID; }
+
+// convert user fields to csv row
+std::vector<std::string> User::toCSVRow() const {
+    return {userID, fullName, email, hashedPassword, walletID};
+}
+
+==============================
+FILE: User.h
+==============================
+#pragma once
+#include <string>
+#include <vector>
+
+// full file is personal implementation
+class User {
+public:
+    User() = default;
+
+    // constructor for creating a new user object
+    User(const std::string& fullName,
+         const std::string& email,
+         const std::string& hashedPassword,
+         const std::string& userID,
+         const std::string& walletID);
+
+    // getters
+    std::string getUserID() const;         // return unique 10-digit ID
+    std::string getFullName() const;       // return full name
+    std::string getEmail() const;          // return email
+    std::string getHashedPassword() const; // return hashed password
+    std::string getWalletID() const;       // return linked wallet ID
+
+    // convert user to csv row for saving
+    std::vector<std::string> toCSVRow() const;
+
+private:
+    std::string userID;        // unique 10-digit ID
+    std::string fullName;      // user's full name
+    std::string email;         // user's email
+    std::string hashedPassword; // hashed password using std::hash<string>
+    std::string walletID;      // link to wallet CSV
+};
+
+==============================
+FILE: UserManager.cpp
+==============================
+#include "UserManager.h"
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <random>
+#include <functional> // std::hash
+
+// personal implementation
+
+// constructor just loads all users from csv
+UserManager::UserManager(const std::string& userCSV)
+    : userCSVFile(userCSV)
+{
+    loadUsers();
+}
+
+// load users from csv into vector
+void UserManager::loadUsers() {
+    std::ifstream file(userCSVFile);
+    if (!file.is_open()) return; // nothing to load
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::vector<std::string> tokens = CSVReader::tokenise(line, ',');
+        if (tokens.size() != 5) continue; // skip malformed line
+
+        // create user object and store in vector
+        User user(tokens[1], tokens[2], tokens[3], tokens[0], tokens[4]);
+        users.push_back(user);
+    }
+}
+
+// append a single user to csv
+void UserManager::saveUser(const User& user) {
+    CSVReader::writeCSV(userCSVFile, {user.toCSVRow()}, true);
+}
+
+// check if user already exists by full name + email
+bool UserManager::userExists(const std::string& fullName, const std::string& email) const {
+    for (const auto& u : users) {
+        if (u.getFullName() == fullName && u.getEmail() == email) return true;
+    }
+    return false;
+}
+
+// generate unique 10-digit ID for user
+std::string UserManager::generateUniqueUserID() const {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 9);
+
+    std::string id;
+    bool unique = false;
+    while (!unique) {
+        id.clear();
+        for (int i = 0; i < 10; ++i) id += std::to_string(dis(gen));
+
+        // make sure id isn't already taken
+        unique = true;
+        for (const auto& u : users) {
+            if (u.getUserID() == id) {
+                unique = false;
+                break;
+            }
+        }
+    }
+    return id;
+}
+
+// deterministic hash using std::hash with fixed seed
+std::string UserManager::hashPassword(const std::string& password) const {
+    // std::hash itself is called deterministically here
+    std::hash<std::string> hasher;
+    size_t rawHash = hasher(password);
+
+    // convert to string using hex, ensures same result across platforms/runs
+    std::stringstream ss;
+    ss << std::hex << rawHash; 
+    return ss.str();
+}
+
+// register a new user
+bool UserManager::registerUser(const std::string& fullName,
+                               const std::string& email,
+                               const std::string& password,
+                               User& outUser)
+{
+    if (userExists(fullName, email)) {
+        std::cout << "User with this name and email already exists.\n";
+        return false;
+    }
+
+    // generate id, wallet link, hash password
+    std::string userID = generateUniqueUserID();
+    std::string walletID = userID + "_wallet";
+    std::string hashedPassword = hashPassword(password);
+
+    // create user object, store in memory and csv
+    User newUser(fullName, email, hashedPassword, userID, walletID);
+    users.push_back(newUser);
+    saveUser(newUser);
+
+    outUser = newUser; // return created user
+    return true;
+}
+
+// login user by id + password
+bool UserManager::loginUser(const std::string& userID,
+                            const std::string& password,
+                            User& outUser)
+{
+    std::string hashedInput = hashPassword(password);
+    for (const auto& u : users) {
+        if (u.getUserID() == userID && u.getHashedPassword() == hashedInput) {
+            outUser = u;
+            return true;
+        }
+    }
+    return false;
+}
+
+// return all users in memory
+std::vector<User> UserManager::getAllUsers() const {
+    return users;
+}
+
+==============================
+FILE: UserManager.h
+==============================
+#pragma once
+#include "User.h"
+#include "../core/CSVReader.h"
+#include <string>
+#include <vector>
+#include <unordered_map>
+
+// personal implementation
+class UserManager {
+public:
+    UserManager(const std::string& userCSV); // load users from CSV on init
+
+    // register a new user, returns false if duplicate
+    bool registerUser(const std::string& fullName,
+                      const std::string& email,
+                      const std::string& password,
+                      User& outUser);
+
+    // login existing user by ID + password
+    bool loginUser(const std::string& userID,
+                   const std::string& password,
+                   User& outUser);
+
+    // return all loaded users
+    std::vector<User> getAllUsers() const;
+
+private:
+    std::string userCSVFile;     // csv file storing users
+    std::vector<User> users;     // in-memory cache
+
+    // helpers
+    void loadUsers();                               // load from csv
+    void saveUser(const User& user);               // append user to csv
+    bool userExists(const std::string& fullName, const std::string& email) const; // check duplicates
+    std::string generateUniqueUserID() const;      // generate unique 10-digit ID
+    std::string hashPassword(const std::string& password) const; // hash password
 };
