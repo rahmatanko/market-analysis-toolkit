@@ -1,11 +1,12 @@
 # compiler
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -I./core
+CXXFLAGS = -std=c++17 -g -Wall -I./core
 
 # source files (all .cpp under src recursively)
 SRC = $(wildcard *.cpp) \
       $(wildcard core/*.cpp) \
-      $(wildcard market/*.cpp)
+      $(wildcard market/*.cpp) \
+      $(wildcard user/*.cpp)
 
 # build folder
 BUILD = build

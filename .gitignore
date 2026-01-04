@@ -8,7 +8,8 @@ build/
 data/
 
 # Ignore output files
-*.sh
+out/
+!out/rahmatanko_code.txt
 
 # Ignore editor/IDE files
 *.swp
