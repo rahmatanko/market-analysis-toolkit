@@ -1,0 +1,18 @@
+# Ignore build artifacts
+build/
+*.o
+*.exe
+*.out
+
+# Ignore local data
+data/
+
+# Ignore output files
+*.sh
+
+# Ignore editor/IDE files
+*.swp
+*.swo
+*.vscode/
+*.idea/
+*.sh
