@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 
-// personal implementation: this whole file is mine
+// personal implementation
 
 // type of transaction
 enum class TransactionType

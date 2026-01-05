@@ -5,6 +5,8 @@
 #include <string>    // for std::string
 
 // personal implementation
+// wallet balances are tracked in base currency (USDT)
+
 
 // just assign filenames
 WalletManager::WalletManager(const std::string& walletFile,
@@ -31,13 +33,31 @@ Wallet WalletManager::loadWallet(const std::string& userId)
     return wallet;
 }
 
-// save wallet (append row for now)
+// save wallet
 void WalletManager::saveWallet(const std::string& userId, Wallet& wallet)
 {
+    std::ifstream in(walletsCSV);
     std::vector<std::vector<std::string>> rows;
-    rows.push_back({userId, "USDT", "UPDATED"}); // simple save
-    CSVReader::writeCSV(walletsCSV, rows, true);
+    std::string line;
+
+    // keep all other users
+    while (std::getline(in, line))
+    {
+        auto tokens = CSVReader::tokenise(line, ',');
+        if (tokens[0] != userId)
+            rows.push_back(tokens);
+    }
+
+    // write updated balance
+    rows.push_back({
+        userId,
+        "USDT",
+        std::to_string(wallet.getBalance("USDT"))
+    });
+
+    CSVReader::writeCSV(walletsCSV, rows, false); // overwrite
 }
+
 
 // deposit funds into wallet, log tx
 bool WalletManager::deposit(const std::string& userId,
@@ -47,6 +67,7 @@ bool WalletManager::deposit(const std::string& userId,
     if (amount <= 0) return false; // reject bad amounts
 
     wallet.insertCurrency("USDT", amount); // add to wallet
+    saveWallet(userId, wallet);
 
     auto now = std::time(nullptr);
 
@@ -71,6 +92,7 @@ bool WalletManager::withdraw(const std::string& userId,
                              double amount)
 {
     if (!wallet.removeCurrency("USDT", amount)) return false; // not enough
+    saveWallet(userId, wallet);
 
     auto now = std::time(nullptr);
 
