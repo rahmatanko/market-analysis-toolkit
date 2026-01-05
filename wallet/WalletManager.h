@@ -18,11 +18,17 @@ public:
     // save current wallet state
     void saveWallet(const std::string& userId, Wallet& wallet);
 
-    // deposit and log
-    bool deposit(const std::string& userId, Wallet& wallet, double amount);
+    // deposit and log (multi-asset; default = USDT)
+    bool deposit(const std::string& userId, 
+                 Wallet& wallet, 
+                 double amount,
+                 const std::string& asset = "USDT");
 
-    // withdraw and log
-    bool withdraw(const std::string& userId, Wallet& wallet, double amount);
+    // withdraw and log (multi-asset; default = USDT)
+    bool withdraw(const std::string& userId, 
+                  Wallet& wallet, 
+                  double amount,
+                  const std::string& asset = "USDT");
 
     // get last n transactions
     std::vector<Transaction> getRecentTransactions(
@@ -33,13 +39,13 @@ public:
     // compute simple stats for a user
     void printStatistics(const std::string& userId,
                          const std::string& productFilter = "");
+    
+    // helper: append transaction to csv
+    void logTransaction(const Transaction& tx);
 
 private:
     std::string walletsCSV;        // where wallets are saved
     std::string transactionsCSV;   // transaction log
-
-    // helper: append transaction to csv
-    void logTransaction(const Transaction& tx);
 
     // load all transactions
     std::vector<Transaction> loadAllTransactions();

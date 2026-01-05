@@ -1,59 +1,57 @@
 #include <iostream>
-#include <string>
-#include "wallet/WalletManager.h"
-#include "wallet/Wallet.h"
-#include "wallet/Transaction.h"
+#include <vector>
+#include "../market/MarketDataLoader.h"
+#include "../wallet/WalletManager.h"
+#include "../user/User.h"
+#include "../trading/TradeSimulator.h"
 
-int main() {
-    // fake CSV files for testing
-    std::string walletsCSV = "data/test_wallets.csv";
+int main() 
+{
+    // load market data (starter dataset, task 1)
+    std::string marketCSV = "data/small_market_data.csv";
+    MarketDataLoader marketData(marketCSV);
+
+    // initialize wallet manager with wallets + transaction csv
+    std::string walletsCSV = "data/test_wallets.csv"; // test wallet already has some data
     std::string transactionsCSV = "data/test_transactions.csv";
+    WalletManager walletManager(walletsCSV, transactionsCSV);
 
-    // create WalletManager
-    WalletManager wm(walletsCSV, transactionsCSV);
+    // create a sample user manually (normally would load from user csv)
+    std::string fullName = "Alice Example";
+    std::string email = "alice@example.com";
+    std::string hashedPassword = "dummyhashed"; // just for testing
+    std::string userID = "1234567890";
+    std::string walletID = userID; // 1:1 mapping for simplicity
+    User user(fullName, email, hashedPassword, userID, walletID);
 
-    // test user
-    std::string userId = "1234567890";
+    // print info to show we loaded user
+    std::cout << "user: " << fullName << " | id: " << user.getUserID() << "\n";
 
-    // load wallet (should be empty at first)
-    Wallet wallet = wm.loadWallet(userId);
-    std::cout << "initial wallet:\n" << wallet << std::endl;
+    // initialize trade simulator
+    TradeSimulator simulator(marketData, walletManager);
 
-    // deposit funds
-    std::cout << "depositing 1000 USDT...\n";
-    wm.deposit(userId, wallet, 1000);
-    std::cout << "wallet after deposit:\n" << wallet << std::endl;
+    // run simulation for the test user
+    std::cout << "simulating trades...\n";
+    simulator.simulateTrades(user);
 
-    // withdraw some funds
-    std::cout << "withdrawing 250 USDT...\n";
-    wm.withdraw(userId, wallet, 250);
-    std::cout << "wallet after withdrawal:\n" << wallet << std::endl;
+    // reload wallet to show updated balances
+    std::cout << "loading wallet after trades...\n";
+    Wallet wallet = walletManager.loadWallet(user.getWalletID());
+    std::cout << wallet << "\n"; // 
 
-    // simulate ask transaction (personal implementation)
-    Transaction askTx(userId, TransactionType::ASK, "BTC/USDT", 0.5, wallet.containsCurrency("USDT",0) ?  wallet.containsCurrency("USDT",0) : 0, "2026-01-04 16:00:00");
-    wm.deposit(userId, wallet, 0); // just to trigger logging example
-    wm.deposit(userId, wallet, 0); // dummy deposits to log ask/bid
-
-    // simulate bid transaction (personal implementation)
-    Transaction bidTx(userId, TransactionType::BID, "ETH/USDT", 2, wallet.containsCurrency("USDT",0) ?  wallet.containsCurrency("USDT",0) : 0, "2026-01-04 16:05:00");
-    wm.deposit(userId, wallet, 0); // dummy
-
-    // print recent transactions
-    std::cout << "\nrecent transactions:\n";
-    auto recent = wm.getRecentTransactions(userId, 5);
-    for (auto& tx : recent) {
-        std::cout << tx.userId << " | " 
-                  << Transaction::typeToString(tx.type) << " | "
-                  << tx.product << " | "
-                  << tx.amount << " | "
-                  << tx.balanceAfter << " | "
-                  << tx.timestamp;
-        std::cout << "\n";
+    // print recent transactions to confirm trades
+    std::cout << "recent transactions (last 5):\n";
+    std::vector<Transaction> recentTxs = walletManager.getRecentTransactions(user.getUserID(), 5);
+    for (const auto& tx : recentTxs)
+    {
+        std::cout << "[" << tx.timestamp << "] "
+                  << Transaction::typeToString(tx.type) << " "
+                  << tx.product << " "
+                  << tx.amount << " | balance after: " 
+                  << tx.balanceAfter << "\n";
     }
 
-    // print summary statistics
-    std::cout << "\nstatistics for user " << userId << ":\n";
-    wm.printStatistics(userId);
-
+    // done
+    std::cout << "task 4 simulation test complete\n";
     return 0;
 }

@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <set>
 
 #include "OrderBookEntry.h"
 #include "Candlestick.h"
@@ -31,6 +32,15 @@ public:
         OrderBookType type,
         Timeframe timeframe
     );
+
+    // returns a list of all unique products in the dataset
+    std::vector<std::string> getAllProducts() const
+    {
+        std::set<std::string> uniqueProducts;
+        for (const auto& order : orders)
+            uniqueProducts.insert(order.product);
+        return std::vector<std::string>(uniqueProducts.begin(), uniqueProducts.end());
+    }
 
 private:
     // holds all market orders loaded from the dataset

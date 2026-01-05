@@ -316,64 +316,63 @@ public:
 FILE: main.cpp
 ==============================
 #include <iostream>
-#include <string>
-#include "wallet/WalletManager.h"
-#include "wallet/Wallet.h"
-#include "wallet/Transaction.h"
+#include <vector>
+#include "../market/MarketDataLoader.h"
+#include "../wallet/WalletManager.h"
+#include "../user/User.h"
+#include "../trading/TradeSimulator.h"
 
-int main() {
-    // fake CSV files for testing
-    std::string walletsCSV = "data/test_wallets.csv";
+int main() 
+{
+    // load market data (starter dataset, task 1)
+    std::string marketCSV = "data/small_market_data.csv";
+    MarketDataLoader marketData(marketCSV);
+
+    // initialize wallet manager with wallets + transaction csv
+    std::string walletsCSV = "data/test_wallets.csv"; // test wallet already has some data
     std::string transactionsCSV = "data/test_transactions.csv";
+    WalletManager walletManager(walletsCSV, transactionsCSV);
 
-    // create WalletManager
-    WalletManager wm(walletsCSV, transactionsCSV);
+    // create a sample user manually (normally would load from user csv)
+    std::string fullName = "Alice Example";
+    std::string email = "alice@example.com";
+    std::string hashedPassword = "dummyhashed"; // just for testing
+    std::string userID = "1234567890";
+    std::string walletID = userID; // 1:1 mapping for simplicity
+    User user(fullName, email, hashedPassword, userID, walletID);
 
-    // test user
-    std::string userId = "1234567890";
+    // print info to show we loaded user
+    std::cout << "user: " << fullName << " | id: " << user.getUserID() << "\n";
 
-    // load wallet (should be empty at first)
-    Wallet wallet = wm.loadWallet(userId);
-    std::cout << "initial wallet:\n" << wallet << std::endl;
+    // initialize trade simulator
+    TradeSimulator simulator(marketData, walletManager);
 
-    // deposit funds
-    std::cout << "depositing 1000 USDT...\n";
-    wm.deposit(userId, wallet, 1000);
-    std::cout << "wallet after deposit:\n" << wallet << std::endl;
+    // run simulation for the test user
+    std::cout << "simulating trades...\n";
+    simulator.simulateTrades(user);
 
-    // withdraw some funds
-    std::cout << "withdrawing 250 USDT...\n";
-    wm.withdraw(userId, wallet, 250);
-    std::cout << "wallet after withdrawal:\n" << wallet << std::endl;
+    // reload wallet to show updated balances
+    std::cout << "loading wallet after trades...\n";
+    Wallet wallet = walletManager.loadWallet(user.getWalletID());
+    std::cout << wallet << "\n"; // 
 
-    // simulate ask transaction (personal implementation)
-    Transaction askTx(userId, TransactionType::ASK, "BTC/USDT", 0.5, wallet.containsCurrency("USDT",0) ?  wallet.containsCurrency("USDT",0) : 0, "2026-01-04 16:00:00");
-    wm.deposit(userId, wallet, 0); // just to trigger logging example
-    wm.deposit(userId, wallet, 0); // dummy deposits to log ask/bid
-
-    // simulate bid transaction (personal implementation)
-    Transaction bidTx(userId, TransactionType::BID, "ETH/USDT", 2, wallet.containsCurrency("USDT",0) ?  wallet.containsCurrency("USDT",0) : 0, "2026-01-04 16:05:00");
-    wm.deposit(userId, wallet, 0); // dummy
-
-    // print recent transactions
-    std::cout << "\nrecent transactions:\n";
-    auto recent = wm.getRecentTransactions(userId, 5);
-    for (auto& tx : recent) {
-        std::cout << tx.userId << " | " 
-                  << Transaction::typeToString(tx.type) << " | "
-                  << tx.product << " | "
-                  << tx.amount << " | "
-                  << tx.balanceAfter << " | "
-                  << tx.timestamp;
-        std::cout << "\n";
+    // print recent transactions to confirm trades
+    std::cout << "recent transactions (last 5):\n";
+    std::vector<Transaction> recentTxs = walletManager.getRecentTransactions(user.getUserID(), 5);
+    for (const auto& tx : recentTxs)
+    {
+        std::cout << "[" << tx.timestamp << "] "
+                  << Transaction::typeToString(tx.type) << " "
+                  << tx.product << " "
+                  << tx.amount << " | balance after: " 
+                  << tx.balanceAfter << "\n";
     }
 
-    // print summary statistics
-    std::cout << "\nstatistics for user " << userId << ":\n";
-    wm.printStatistics(userId);
-
+    // done
+    std::cout << "task 4 simulation test complete\n";
     return 0;
 }
+
 ==============================
 FILE: Candlestick.cpp
 ==============================
@@ -572,6 +571,7 @@ FILE: MarketDataLoader.h
 #include <vector>
 #include <string>
 #include <map>
+#include <set>
 
 #include "OrderBookEntry.h"
 #include "Candlestick.h"
@@ -601,6 +601,15 @@ public:
         OrderBookType type,
         Timeframe timeframe
     );
+
+    // returns a list of all unique products in the dataset
+    std::vector<std::string> getAllProducts() const
+    {
+        std::set<std::string> uniqueProducts;
+        for (const auto& order : orders)
+            uniqueProducts.insert(order.product);
+        return std::vector<std::string>(uniqueProducts.begin(), uniqueProducts.end());
+    }
 
 private:
     // holds all market orders loaded from the dataset
@@ -691,6 +700,228 @@ public:
     std::string product;     // product pair e.g. "ETH/USDT"
     OrderBookType orderType; // bid / ask / etc.
     std::string username;    // source of the order
+};
+
+==============================
+FILE: Trade.h
+==============================
+#pragma once
+#include <string>
+#include "../market/OrderBookEntry.h"
+
+// personal implementation
+// simple wrapper used for simulated user trades in task 4
+// we reuse OrderBookEntry directly so the rest of the system
+// can treat simulated trades like normal market orders
+class Trade
+{
+public:
+    // the underlying order data (price, amount, timestamp, etc.)
+    OrderBookEntry order;
+
+    // constructor just stores the given order
+    Trade(const OrderBookEntry& order)
+        : order(order) {}
+};
+
+==============================
+FILE: TradeSimulator.cpp
+==============================
+#include "TradeSimulator.h"
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <set>
+
+// personal implementation
+// all logic in this file is written for task 4
+
+TradeSimulator::TradeSimulator(MarketDataLoader& marketData,
+                               WalletManager& walletManager)
+    : marketData(marketData),
+      walletManager(walletManager)
+{
+    // nothing else to initialize
+}
+
+// returns current system time as "YYYY-MM-DD HH:MM:SS"
+// used to simulate trades occurring in 2025/2026
+std::string TradeSimulator::getCurrentTimestamp() const
+{
+    auto now = std::chrono::system_clock::now();
+    std::time_t time = std::chrono::system_clock::to_time_t(now);
+    std::tm* tm = std::localtime(&time);
+
+    std::ostringstream oss;
+    oss << std::put_time(tm, "%Y-%m-%d %H:%M:%S");
+    return oss.str();
+}
+
+// generate a price with small random variation around a base price
+// this avoids unrealistic jumps while still being random
+double TradeSimulator::generatePrice(double basePrice)
+{
+    static std::mt19937 rng(std::random_device{}());
+    std::uniform_real_distribution<double> dist(0.95, 1.05);
+    return basePrice * dist(rng);
+}
+
+void TradeSimulator::simulateTrades(const User& user) 
+{
+    // load the user's wallet from csv
+    Wallet wallet = walletManager.loadWallet(user.getWalletID());
+
+    // list of known products to simulate trades for
+    std::vector<std::string> knownProducts = marketData.getAllProducts();
+
+    // loop over each product
+    for (const std::string& product : knownProducts)
+    {
+        // compute yearly candlesticks to get a stable historical price
+        auto candles = marketData.computeCandlesticks(
+            product,
+            OrderBookType::ask,
+            Timeframe::Yearly
+        );
+
+        // if no historical data exists, skip this product
+        if (candles.empty())
+            continue;
+
+        // use the last known close price as reference
+        double basePrice = candles.back().close;
+
+        // extract base currency from product string (e.g., "BTC" from "BTC/USDT")
+        std::string baseCurrency = product.substr(0, product.find('/'));
+
+        // create 5 bids and 5 asks for this product
+        for (int i = 0; i < 5; ++i)
+        {
+            std::string timestamp = getCurrentTimestamp();
+            double price = generatePrice(basePrice);
+
+            // calculate amount for bid (buying)
+            double maxAffordable = wallet.getBalance("USDT") / price; // max amount user can buy
+            double bidAmount = std::min(1.0, maxAffordable);          // buy 1 unit or as much as possible
+            if (bidAmount <= 0) continue;                             // skip if nothing can be bought
+
+            // create a bid order (user buys the asset)
+            OrderBookEntry bid(
+                price,
+                bidAmount,
+                timestamp,
+                product,
+                OrderBookType::bidsale,   // bidsale so processSale works
+                user.getUserID()
+            );
+
+            // check if wallet can afford the bid
+            if (wallet.canFulfillOrder(bid))
+            {
+                // update wallet balances
+                wallet.processSale(bid);
+
+                // log bid transaction via public logTransaction
+                Transaction tx(
+                    user.getUserID(),
+                    TransactionType::BID,
+                    product,
+                    price * bidAmount,
+                    wallet.getBalance("USDT"),
+                    timestamp
+                );
+
+                // persist transaction
+                walletManager.logTransaction(tx);
+            }
+
+            // calculate amount for ask (selling)
+            double assetBalance = wallet.getBalance(baseCurrency);    // e.g., BTC or ETH
+            double askAmount = std::min(1.0, assetBalance);           // sell 1 unit or as much as possible
+            if (askAmount <= 0) continue;                             // skip if none to sell
+
+            // create an ask order (user sells the asset)
+            OrderBookEntry ask(
+                price,
+                askAmount,
+                timestamp,
+                product,
+                OrderBookType::asksale,  // asksale so processSale works
+                user.getUserID()
+            );
+
+            // check if wallet can fulfill the ask
+            if (wallet.canFulfillOrder(ask))
+            {
+                // update wallet balances
+                wallet.processSale(ask);
+
+                // log ask transaction via public logTransaction
+                Transaction tx(
+                    user.getUserID(),
+                    TransactionType::ASK,
+                    product,
+                    price * askAmount,
+                    wallet.getBalance("USDT"),
+                    timestamp
+                );
+
+                // persist transaction
+                walletManager.logTransaction(tx);
+            }
+        }
+    }
+    // remove tiny leftover fractions for cleanliness
+    for (auto& [currency, amount] : wallet.getAllBalances())
+    {
+        if (amount < 1e-6) // treat as zero
+            wallet.removeCurrency(currency, amount);
+    }
+
+    // final save to ensure wallet state is stored
+    walletManager.saveWallet(user.getUserID(), wallet);
+}
+
+
+
+==============================
+FILE: TradeSimulator.h
+==============================
+#pragma once
+#include <vector>
+#include <string>
+#include <random>
+
+#include "../market/MarketDataLoader.h"
+#include "../wallet/WalletManager.h"
+#include "../user/User.h"
+
+// personal implementation
+// responsible for simulating user trading activity (task 4)
+// generates ask and bid orders and updates wallet state accordingly
+class TradeSimulator
+{
+public:
+    // constructor receives shared market data and wallet manager
+    // no ownership here, just references
+    TradeSimulator(MarketDataLoader& marketData,
+                   WalletManager& walletManager);
+
+    // simulate trades for all products for a given logged-in user
+    void simulateTrades(const User& user);
+
+private:
+    // access to market prices (read-only)
+    MarketDataLoader& marketData;
+
+    // handles wallet updates and csv persistence
+    WalletManager& walletManager;
+
+    // helper: get current system timestamp as string
+    std::string getCurrentTimestamp() const;
+
+    // helper: generate a realistic price based on historical price
+    double generatePrice(double basePrice);
 };
 
 ==============================
@@ -1140,17 +1371,18 @@ std::string Wallet::toString()
 bool Wallet::canFulfillOrder(OrderBookEntry order)
 {
     std::vector<std::string> currs = CSVReader::tokenise(order.product, '/');
-    // ask
-    if (order.orderType == OrderBookType::ask)
+
+    // ask / asksale: user must have enough of the first currency to sell
+    if (order.orderType == OrderBookType::ask || order.orderType == OrderBookType::asksale)
     {
         double amount = order.amount;
         std::string currency = currs[0];
         std::cout << "Wallet::canFulfillOrder " << currency << " : " << amount << std::endl;
-
         return containsCurrency(currency, amount);
     }
-    // bid
-    if (order.orderType == OrderBookType::bid)
+
+    // bid / bidsale: user must have enough of the second currency to buy
+    if (order.orderType == OrderBookType::bid || order.orderType == OrderBookType::bidsale)
     {
         double amount = order.amount * order.price;
         std::string currency = currs[1];
@@ -1158,10 +1390,9 @@ bool Wallet::canFulfillOrder(OrderBookEntry order)
         return containsCurrency(currency, amount);
     }
 
-
-    return false; 
+    return false;
 }
-      
+ 
 
 void Wallet::processSale(OrderBookEntry& sale)
 {
@@ -1220,8 +1451,13 @@ public:
     std::string toString();
     friend std::ostream& operator<<(std::ostream& os, Wallet& wallet);
 
-    // personal implementation: get actual balance
+    // get balance in usdt
     double getBalance(const std::string& type) const;
+    // get all balances as a map, needed for WalletManager saveWallet
+    const std::map<std::string, double> getAllBalances() const
+    {
+        return currencies; // just return a copy
+    }
 
 private:
     std::map<std::string,double> currencies;
@@ -1237,7 +1473,6 @@ FILE: WalletManager.cpp
 #include <string>    // for std::string
 
 // personal implementation
-// wallet balances are tracked in base currency (USDT)
 
 
 // just assign filenames
@@ -1280,12 +1515,16 @@ void WalletManager::saveWallet(const std::string& userId, Wallet& wallet)
             rows.push_back(tokens);
     }
 
-    // write updated balance
-    rows.push_back({
-        userId,
-        "USDT",
-        std::to_string(wallet.getBalance("USDT"))
-    });
+    // write updated balances for all currencies in this wallet
+    auto balances = wallet.getAllBalances();
+    for (const auto& [currency, amount] : balances) 
+    {
+        rows.push_back({
+            userId,
+            currency,
+            std::to_string(amount)
+        });
+    }
 
     CSVReader::writeCSV(walletsCSV, rows, false); // overwrite
 }
@@ -1294,20 +1533,21 @@ void WalletManager::saveWallet(const std::string& userId, Wallet& wallet)
 // deposit funds into wallet, log tx
 bool WalletManager::deposit(const std::string& userId,
                             Wallet& wallet,
-                            double amount)
+                            double amount,
+                            const std::string& asset)
 {
     if (amount <= 0) return false; // reject bad amounts
 
-    wallet.insertCurrency("USDT", amount); // add to wallet
+    wallet.insertCurrency(asset, amount); // add to wallet
     saveWallet(userId, wallet);
 
     auto now = std::time(nullptr);
 
     // get actual balance after deposit once
-    double balanceAfter = wallet.getBalance("USDT"); 
+    double balanceAfter = wallet.getBalance(asset); 
 
     Transaction tx(userId, TransactionType::DEPOSIT,
-                   "USDT",
+                   asset,
                    amount,
                    balanceAfter,
                    std::ctime(&now));
@@ -1321,18 +1561,19 @@ bool WalletManager::deposit(const std::string& userId,
 // withdraw funds from wallet, log tx
 bool WalletManager::withdraw(const std::string& userId,
                              Wallet& wallet,
-                             double amount)
+                             double amount,
+                             const std::string& asset)
 {
-    if (!wallet.removeCurrency("USDT", amount)) return false; // not enough
+    if (!wallet.removeCurrency(asset, amount)) return false; // not enough
     saveWallet(userId, wallet);
 
     auto now = std::time(nullptr);
 
-    double balanceAfter = wallet.getBalance("USDT"); // correct balance
+    double balanceAfter = wallet.getBalance(asset); // correct balance
 
     Transaction tx(userId,
                    TransactionType::WITHDRAW,
-                   "USDT",
+                   asset,
                    amount,
                    balanceAfter,
                    std::ctime(&now));
@@ -1416,6 +1657,7 @@ void WalletManager::printStatistics(const std::string& userId,
     std::cout << "BIDS: " << bids << "\n";
     std::cout << "TOTAL SPENT: " << totalSpent << "\n";
 }
+
 ==============================
 FILE: WalletManager.h
 ==============================
@@ -1439,11 +1681,17 @@ public:
     // save current wallet state
     void saveWallet(const std::string& userId, Wallet& wallet);
 
-    // deposit and log
-    bool deposit(const std::string& userId, Wallet& wallet, double amount);
+    // deposit and log (multi-asset; default = USDT)
+    bool deposit(const std::string& userId, 
+                 Wallet& wallet, 
+                 double amount,
+                 const std::string& asset = "USDT");
 
-    // withdraw and log
-    bool withdraw(const std::string& userId, Wallet& wallet, double amount);
+    // withdraw and log (multi-asset; default = USDT)
+    bool withdraw(const std::string& userId, 
+                  Wallet& wallet, 
+                  double amount,
+                  const std::string& asset = "USDT");
 
     // get last n transactions
     std::vector<Transaction> getRecentTransactions(
@@ -1454,13 +1702,13 @@ public:
     // compute simple stats for a user
     void printStatistics(const std::string& userId,
                          const std::string& productFilter = "");
+    
+    // helper: append transaction to csv
+    void logTransaction(const Transaction& tx);
 
 private:
     std::string walletsCSV;        // where wallets are saved
     std::string transactionsCSV;   // transaction log
-
-    // helper: append transaction to csv
-    void logTransaction(const Transaction& tx);
 
     // load all transactions
     std::vector<Transaction> loadAllTransactions();

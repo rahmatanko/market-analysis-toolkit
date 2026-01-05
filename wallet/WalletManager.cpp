@@ -5,7 +5,6 @@
 #include <string>    // for std::string
 
 // personal implementation
-// wallet balances are tracked in base currency (USDT)
 
 
 // just assign filenames
@@ -48,12 +47,16 @@ void WalletManager::saveWallet(const std::string& userId, Wallet& wallet)
             rows.push_back(tokens);
     }
 
-    // write updated balance
-    rows.push_back({
-        userId,
-        "USDT",
-        std::to_string(wallet.getBalance("USDT"))
-    });
+    // write updated balances for all currencies in this wallet
+    auto balances = wallet.getAllBalances();
+    for (const auto& [currency, amount] : balances) 
+    {
+        rows.push_back({
+            userId,
+            currency,
+            std::to_string(amount)
+        });
+    }
 
     CSVReader::writeCSV(walletsCSV, rows, false); // overwrite
 }
@@ -62,20 +65,21 @@ void WalletManager::saveWallet(const std::string& userId, Wallet& wallet)
 // deposit funds into wallet, log tx
 bool WalletManager::deposit(const std::string& userId,
                             Wallet& wallet,
-                            double amount)
+                            double amount,
+                            const std::string& asset)
 {
     if (amount <= 0) return false; // reject bad amounts
 
-    wallet.insertCurrency("USDT", amount); // add to wallet
+    wallet.insertCurrency(asset, amount); // add to wallet
     saveWallet(userId, wallet);
 
     auto now = std::time(nullptr);
 
     // get actual balance after deposit once
-    double balanceAfter = wallet.getBalance("USDT"); 
+    double balanceAfter = wallet.getBalance(asset); 
 
     Transaction tx(userId, TransactionType::DEPOSIT,
-                   "USDT",
+                   asset,
                    amount,
                    balanceAfter,
                    std::ctime(&now));
@@ -89,18 +93,19 @@ bool WalletManager::deposit(const std::string& userId,
 // withdraw funds from wallet, log tx
 bool WalletManager::withdraw(const std::string& userId,
                              Wallet& wallet,
-                             double amount)
+                             double amount,
+                             const std::string& asset)
 {
-    if (!wallet.removeCurrency("USDT", amount)) return false; // not enough
+    if (!wallet.removeCurrency(asset, amount)) return false; // not enough
     saveWallet(userId, wallet);
 
     auto now = std::time(nullptr);
 
-    double balanceAfter = wallet.getBalance("USDT"); // correct balance
+    double balanceAfter = wallet.getBalance(asset); // correct balance
 
     Transaction tx(userId,
                    TransactionType::WITHDRAW,
-                   "USDT",
+                   asset,
                    amount,
                    balanceAfter,
                    std::ctime(&now));

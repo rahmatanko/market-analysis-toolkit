@@ -2,11 +2,12 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -g -Wall -I./core
 
-# source files (all .cpp under src recursively)
+# source files
 SRC = $(wildcard *.cpp) \
       $(wildcard core/*.cpp) \
       $(wildcard market/*.cpp) \
       $(wildcard user/*.cpp) \
+      $(wildcard trading/*.cpp) \
       $(wildcard wallet/*.cpp)
 
 # build folder
