@@ -1,71 +1,59 @@
-#include "user/UserManager.h"
 #include <iostream>
+#include <string>
+#include "wallet/WalletManager.h"
+#include "wallet/Wallet.h"
+#include "wallet/Transaction.h"
 
 int main() {
-    // path to CSV file for testing
-    std::string userCSV = "data/users_test.csv";
+    // fake CSV files for testing
+    std::string walletsCSV = "data/test_wallets.csv";
+    std::string transactionsCSV = "data/test_transactions.csv";
 
-    // create the user manager, loads existing users if CSV exists
-    UserManager userManager(userCSV);
+    // create WalletManager
+    WalletManager wm(walletsCSV, transactionsCSV);
 
-    // create a variable to hold the user object returned after registration/login
-    User testUser;
+    // test user
+    std::string userId = "1234567890";
 
-    // 1. check if the user already exists in CSV
-    std::vector<User> allUsers = userManager.getAllUsers();
-    bool userFound = false;
-    for (const auto& u : allUsers) {
-        if (u.getFullName() == "Alice Johnson" && u.getEmail() == "alice@example.com") {
-            testUser = u; // assign existing user
-            userFound = true;
-            break;
-        }
+    // load wallet (should be empty at first)
+    Wallet wallet = wm.loadWallet(userId);
+    std::cout << "initial wallet:\n" << wallet << std::endl;
+
+    // deposit funds
+    std::cout << "depositing 1000 USDT...\n";
+    wm.deposit(userId, wallet, 1000);
+    std::cout << "wallet after deposit:\n" << wallet << std::endl;
+
+    // withdraw some funds
+    std::cout << "withdrawing 250 USDT...\n";
+    wm.withdraw(userId, wallet, 250);
+    std::cout << "wallet after withdrawal:\n" << wallet << std::endl;
+
+    // simulate ask transaction (personal implementation)
+    Transaction askTx(userId, TransactionType::ASK, "BTC/USDT", 0.5, wallet.containsCurrency("USDT",0) ?  wallet.containsCurrency("USDT",0) : 0, "2026-01-04 16:00:00");
+    wm.deposit(userId, wallet, 0); // just to trigger logging example
+    wm.deposit(userId, wallet, 0); // dummy deposits to log ask/bid
+
+    // simulate bid transaction (personal implementation)
+    Transaction bidTx(userId, TransactionType::BID, "ETH/USDT", 2, wallet.containsCurrency("USDT",0) ?  wallet.containsCurrency("USDT",0) : 0, "2026-01-04 16:05:00");
+    wm.deposit(userId, wallet, 0); // dummy
+
+    // print recent transactions
+    std::cout << "\nrecent transactions:\n";
+    auto recent = wm.getRecentTransactions(userId, 5);
+    for (auto& tx : recent) {
+        std::cout << tx.userId << " | " 
+                  << Transaction::typeToString(tx.type) << " | "
+                  << tx.product << " | "
+                  << tx.amount << " | "
+                  << tx.balanceAfter << " | "
+                  << tx.timestamp;
+        std::cout << "\n";
     }
 
-    // 2. register the user if not found
-    if (!userFound) {
-        std::cout << "Registering new user...\n";
-        bool regSuccess = userManager.registerUser("Alice Johnson", "alice@example.com", "password123", testUser);
-        if (regSuccess) {
-            std::cout << "Registration successful!\n";
-            std::cout << "UserID: " << testUser.getUserID() << "\n";
-            std::cout << "WalletID: " << testUser.getWalletID() << "\n";
-        } else {
-            std::cout << "Registration failed (user may already exist)\n";
-        }
-    } else {
-        std::cout << "User already exists, using existing account.\n";
-        std::cout << "UserID: " << testUser.getUserID() << "\n";
-        std::cout << "WalletID: " << testUser.getWalletID() << "\n";
-    }
-
-    // 3. attempt login with correct credentials
-    std::cout << "\nLogging in with correct credentials...\n";
-    User loginUser;
-    bool loginSuccess = userManager.loginUser(testUser.getUserID(), "password123", loginUser);
-    if (loginSuccess) {
-        std::cout << "Login successful! Welcome " << loginUser.getFullName() << "\n";
-    } else {
-        std::cout << "Login failed with correct credentials (should not happen)\n";
-    }
-
-    // 4. attempt login with wrong password
-    std::cout << "\nLogging in with wrong password...\n";
-    User wrongLogin;
-    bool wrongPass = userManager.loginUser(testUser.getUserID(), "wrongpassword", wrongLogin);
-    if (!wrongPass) {
-        std::cout << "Login correctly failed with wrong password.\n";
-    }
-
-    // 5. display all users currently loaded
-    std::cout << "\nAll users in CSV:\n";
-    allUsers = userManager.getAllUsers(); // reload in case we just added a new user
-    for (const auto& u : allUsers) {
-        std::cout << "UserID: " << u.getUserID()
-                  << ", Name: " << u.getFullName()
-                  << ", Email: " << u.getEmail()
-                  << ", WalletID: " << u.getWalletID() << "\n";
-    }
+    // print summary statistics
+    std::cout << "\nstatistics for user " << userId << ":\n";
+    wm.printStatistics(userId);
 
     return 0;
 }

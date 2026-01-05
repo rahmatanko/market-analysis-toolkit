@@ -315,74 +315,62 @@ public:
 ==============================
 FILE: main.cpp
 ==============================
-#include "user/UserManager.h"
 #include <iostream>
+#include <string>
+#include "wallet/WalletManager.h"
+#include "wallet/Wallet.h"
+#include "wallet/Transaction.h"
 
 int main() {
-    // path to CSV file for testing
-    std::string userCSV = "data/users_test.csv";
+    // fake CSV files for testing
+    std::string walletsCSV = "data/test_wallets.csv";
+    std::string transactionsCSV = "data/test_transactions.csv";
 
-    // create the user manager, loads existing users if CSV exists
-    UserManager userManager(userCSV);
+    // create WalletManager
+    WalletManager wm(walletsCSV, transactionsCSV);
 
-    // create a variable to hold the user object returned after registration/login
-    User testUser;
+    // test user
+    std::string userId = "1234567890";
 
-    // 1. check if the user already exists in CSV
-    std::vector<User> allUsers = userManager.getAllUsers();
-    bool userFound = false;
-    for (const auto& u : allUsers) {
-        if (u.getFullName() == "Alice Johnson" && u.getEmail() == "alice@example.com") {
-            testUser = u; // assign existing user
-            userFound = true;
-            break;
-        }
+    // load wallet (should be empty at first)
+    Wallet wallet = wm.loadWallet(userId);
+    std::cout << "initial wallet:\n" << wallet << std::endl;
+
+    // deposit funds
+    std::cout << "depositing 1000 USDT...\n";
+    wm.deposit(userId, wallet, 1000);
+    std::cout << "wallet after deposit:\n" << wallet << std::endl;
+
+    // withdraw some funds
+    std::cout << "withdrawing 250 USDT...\n";
+    wm.withdraw(userId, wallet, 250);
+    std::cout << "wallet after withdrawal:\n" << wallet << std::endl;
+
+    // simulate ask transaction (personal implementation)
+    Transaction askTx(userId, TransactionType::ASK, "BTC/USDT", 0.5, wallet.containsCurrency("USDT",0) ?  wallet.containsCurrency("USDT",0) : 0, "2026-01-04 16:00:00");
+    wm.deposit(userId, wallet, 0); // just to trigger logging example
+    wm.deposit(userId, wallet, 0); // dummy deposits to log ask/bid
+
+    // simulate bid transaction (personal implementation)
+    Transaction bidTx(userId, TransactionType::BID, "ETH/USDT", 2, wallet.containsCurrency("USDT",0) ?  wallet.containsCurrency("USDT",0) : 0, "2026-01-04 16:05:00");
+    wm.deposit(userId, wallet, 0); // dummy
+
+    // print recent transactions
+    std::cout << "\nrecent transactions:\n";
+    auto recent = wm.getRecentTransactions(userId, 5);
+    for (auto& tx : recent) {
+        std::cout << tx.userId << " | " 
+                  << Transaction::typeToString(tx.type) << " | "
+                  << tx.product << " | "
+                  << tx.amount << " | "
+                  << tx.balanceAfter << " | "
+                  << tx.timestamp;
+        std::cout << "\n";
     }
 
-    // 2. register the user if not found
-    if (!userFound) {
-        std::cout << "Registering new user...\n";
-        bool regSuccess = userManager.registerUser("Alice Johnson", "alice@example.com", "password123", testUser);
-        if (regSuccess) {
-            std::cout << "Registration successful!\n";
-            std::cout << "UserID: " << testUser.getUserID() << "\n";
-            std::cout << "WalletID: " << testUser.getWalletID() << "\n";
-        } else {
-            std::cout << "Registration failed (user may already exist)\n";
-        }
-    } else {
-        std::cout << "User already exists, using existing account.\n";
-        std::cout << "UserID: " << testUser.getUserID() << "\n";
-        std::cout << "WalletID: " << testUser.getWalletID() << "\n";
-    }
-
-    // 3. attempt login with correct credentials
-    std::cout << "\nLogging in with correct credentials...\n";
-    User loginUser;
-    bool loginSuccess = userManager.loginUser(testUser.getUserID(), "password123", loginUser);
-    if (loginSuccess) {
-        std::cout << "Login successful! Welcome " << loginUser.getFullName() << "\n";
-    } else {
-        std::cout << "Login failed with correct credentials (should not happen)\n";
-    }
-
-    // 4. attempt login with wrong password
-    std::cout << "\nLogging in with wrong password...\n";
-    User wrongLogin;
-    bool wrongPass = userManager.loginUser(testUser.getUserID(), "wrongpassword", wrongLogin);
-    if (!wrongPass) {
-        std::cout << "Login correctly failed with wrong password.\n";
-    }
-
-    // 5. display all users currently loaded
-    std::cout << "\nAll users in CSV:\n";
-    allUsers = userManager.getAllUsers(); // reload in case we just added a new user
-    for (const auto& u : allUsers) {
-        std::cout << "UserID: " << u.getUserID()
-                  << ", Name: " << u.getFullName()
-                  << ", Email: " << u.getEmail()
-                  << ", WalletID: " << u.getWalletID() << "\n";
-    }
+    // print summary statistics
+    std::cout << "\nstatistics for user " << userId << ":\n";
+    wm.printStatistics(userId);
 
     return 0;
 }
@@ -945,4 +933,514 @@ private:
     bool userExists(const std::string& fullName, const std::string& email) const; // check duplicates
     std::string generateUniqueUserID() const;      // generate unique 10-digit ID
     std::string hashPassword(const std::string& password) const; // hash password
+};
+
+==============================
+FILE: Transaction.cpp
+==============================
+#include "Transaction.h"
+#include <stdexcept> // for std::runtime_error
+
+
+// personal implementation
+
+// simple constructor, just assign everything
+Transaction::Transaction(std::string userId,
+                         TransactionType type,
+                         std::string product,
+                         double amount,
+                         double balanceAfter,
+                         std::string timestamp)
+    : userId(userId),
+      type(type),
+      product(product),
+      amount(amount),
+      balanceAfter(balanceAfter),
+      timestamp(timestamp)
+{}
+
+// convert transaction to a vector of strings for csv
+std::vector<std::string> Transaction::toCSVRow() const
+{
+    return {
+        userId,
+        typeToString(type),       // convert enum to string
+        product,
+        std::to_string(amount),   // store amount
+        std::to_string(balanceAfter),
+        timestamp
+    };
+}
+
+// rebuild a transaction from a csv row
+Transaction Transaction::fromCSVRow(const std::vector<std::string>& row)
+{
+    return Transaction(
+        row[0],                       // user id
+        stringToType(row[1]),         // type
+        row[2],                       // product
+        std::stod(row[3]),            // amount
+        std::stod(row[4]),            // balance after
+        row[5]                        // timestamp
+    );
+}
+
+// convert enum to string
+std::string Transaction::typeToString(TransactionType type)
+{
+    switch (type)
+    {
+        case TransactionType::DEPOSIT:  return "DEPOSIT";
+        case TransactionType::WITHDRAW: return "WITHDRAW";
+        case TransactionType::ASK:      return "ASK";
+        case TransactionType::BID:      return "BID";
+    }
+    return ""; // fallback
+}
+
+// convert string back to enum
+TransactionType Transaction::stringToType(const std::string& str)
+{
+    if (str == "DEPOSIT")  return TransactionType::DEPOSIT;
+    if (str == "WITHDRAW") return TransactionType::WITHDRAW;
+    if (str == "ASK")      return TransactionType::ASK;
+    if (str == "BID")      return TransactionType::BID;
+    throw std::runtime_error("Invalid transaction type");
+}
+
+==============================
+FILE: Transaction.h
+==============================
+#pragma once
+#include <string>
+#include <vector>
+
+// personal implementation: this whole file is mine
+
+// type of transaction
+enum class TransactionType
+{
+    DEPOSIT,
+    WITHDRAW,
+    ASK,
+    BID
+};
+
+// stores a single transaction
+class Transaction
+{
+public:
+    std::string userId;      // who did it
+    TransactionType type;    // type of tx
+    std::string product;     // currency or product
+    double amount;           // how much involved
+    double balanceAfter;     // wallet balance after tx
+    std::string timestamp;   // when it happened
+
+    // constructor
+    Transaction(std::string userId,
+                TransactionType type,
+                std::string product,
+                double amount,
+                double balanceAfter,
+                std::string timestamp);
+
+    // convert to csv row (for saving)
+    std::vector<std::string> toCSVRow() const;
+
+    // rebuild transaction from csv row
+    static Transaction fromCSVRow(const std::vector<std::string>& row);
+
+    // helpers to convert type enum <-> string
+    static std::string typeToString(TransactionType type);
+    static TransactionType stringToType(const std::string& str);
+};
+
+==============================
+FILE: Wallet.cpp
+==============================
+#include "Wallet.h"
+#include <iostream>
+#include "CSVReader.h"
+
+Wallet::Wallet()
+{
+
+
+}
+
+void Wallet::insertCurrency(std::string type, double amount)
+{
+    double balance;
+    if (amount < 0)
+    {
+        throw std::exception{};
+    }
+    if (currencies.count(type) == 0) // not there yet
+    {
+        balance = 0;
+    }
+    else { // is there 
+        balance = currencies[type];
+    }
+    balance += amount; 
+    currencies[type] = balance; 
+}
+
+bool Wallet::removeCurrency(std::string type, double amount)
+{
+    if (amount < 0)
+    {
+        return false; 
+    }
+    if (currencies.count(type) == 0) // not there yet
+    {
+        //std::cout << "No currency for " << type << std::endl;
+        return false;
+    }
+    else { // is there - do  we have enough
+        if (containsCurrency(type, amount))// we have enough
+        {
+            //std::cout << "Removing " << type << ": " << amount << std::endl;
+            currencies[type] -= amount;
+            return true;
+        } 
+        else // they have it but not enough.
+            return false; 
+    }
+}
+
+bool Wallet::containsCurrency(std::string type, double amount)
+{
+    if (currencies.count(type) == 0) // not there yet
+        return false;
+    else 
+        return currencies[type] >= amount;
+    
+}
+
+double Wallet::getBalance(const std::string& type) const
+{
+    auto it = currencies.find(type);
+    if (it != currencies.end()) return it->second; // return actual amount
+    return 0.0;
+}
+
+std::string Wallet::toString()
+{
+    std::string s;
+    for (std::pair<std::string,double> pair : currencies)
+    {
+        std::string currency = pair.first;
+        double amount = pair.second;
+        s += currency + " : " + std::to_string(amount) + "\n";
+    }
+    return s;
+}
+
+bool Wallet::canFulfillOrder(OrderBookEntry order)
+{
+    std::vector<std::string> currs = CSVReader::tokenise(order.product, '/');
+    // ask
+    if (order.orderType == OrderBookType::ask)
+    {
+        double amount = order.amount;
+        std::string currency = currs[0];
+        std::cout << "Wallet::canFulfillOrder " << currency << " : " << amount << std::endl;
+
+        return containsCurrency(currency, amount);
+    }
+    // bid
+    if (order.orderType == OrderBookType::bid)
+    {
+        double amount = order.amount * order.price;
+        std::string currency = currs[1];
+        std::cout << "Wallet::canFulfillOrder " << currency << " : " << amount << std::endl;
+        return containsCurrency(currency, amount);
+    }
+
+
+    return false; 
+}
+      
+
+void Wallet::processSale(OrderBookEntry& sale)
+{
+    std::vector<std::string> currs = CSVReader::tokenise(sale.product, '/');
+    // ask
+    if (sale.orderType == OrderBookType::asksale)
+    {
+        double outgoingAmount = sale.amount;
+        std::string outgoingCurrency = currs[0];
+        double incomingAmount = sale.amount * sale.price;
+        std::string incomingCurrency = currs[1];
+
+        currencies[incomingCurrency] += incomingAmount;
+        currencies[outgoingCurrency] -= outgoingAmount;
+
+    }
+    // bid
+    if (sale.orderType == OrderBookType::bidsale)
+    {
+        double incomingAmount = sale.amount;
+        std::string incomingCurrency = currs[0];
+        double outgoingAmount = sale.amount * sale.price;
+        std::string outgoingCurrency = currs[1];
+
+        currencies[incomingCurrency] += incomingAmount;
+        currencies[outgoingCurrency] -= outgoingAmount;
+    }
+}
+std::ostream& operator<<(std::ostream& os,  Wallet& wallet)
+{
+    os << wallet.toString();
+    return os;
+}
+
+
+==============================
+FILE: Wallet.h
+==============================
+#pragma once
+
+#include <string>
+#include <map>
+#include "../market/OrderBookEntry.h"
+#include <iostream>
+
+// reused code
+class Wallet 
+{
+public:
+    Wallet();
+    void insertCurrency(std::string type, double amount);
+    bool removeCurrency(std::string type, double amount);
+    bool containsCurrency(std::string type, double amount);
+    bool canFulfillOrder(OrderBookEntry order);
+    void processSale(OrderBookEntry& sale);
+    std::string toString();
+    friend std::ostream& operator<<(std::ostream& os, Wallet& wallet);
+
+    // personal implementation: get actual balance
+    double getBalance(const std::string& type) const;
+
+private:
+    std::map<std::string,double> currencies;
+};
+
+==============================
+FILE: WalletManager.cpp
+==============================
+#include "WalletManager.h"
+#include <iostream>
+#include <ctime>
+#include <fstream>   // for ifstream
+#include <string>    // for std::string
+
+// personal implementation
+
+// just assign filenames
+WalletManager::WalletManager(const std::string& walletFile,
+                             const std::string& transactionFile)
+    : walletsCSV(walletFile),
+      transactionsCSV(transactionFile)
+{}
+
+// load wallet for user
+Wallet WalletManager::loadWallet(const std::string& userId)
+{
+    Wallet wallet;
+    std::ifstream file(walletsCSV);
+    std::string line;
+
+    while (std::getline(file, line))
+    {
+        auto tokens = CSVReader::tokenise(line, ',');
+        if (tokens[0] == userId)
+        {
+            wallet.insertCurrency(tokens[1], std::stod(tokens[2]));
+        }
+    }
+    return wallet;
+}
+
+// save wallet (append row for now)
+void WalletManager::saveWallet(const std::string& userId, Wallet& wallet)
+{
+    std::vector<std::vector<std::string>> rows;
+    rows.push_back({userId, "USDT", "UPDATED"}); // simple save
+    CSVReader::writeCSV(walletsCSV, rows, true);
+}
+
+// deposit funds into wallet, log tx
+bool WalletManager::deposit(const std::string& userId,
+                            Wallet& wallet,
+                            double amount)
+{
+    if (amount <= 0) return false; // reject bad amounts
+
+    wallet.insertCurrency("USDT", amount); // add to wallet
+
+    auto now = std::time(nullptr);
+
+    // get actual balance after deposit once
+    double balanceAfter = wallet.getBalance("USDT"); 
+
+    Transaction tx(userId, TransactionType::DEPOSIT,
+                   "USDT",
+                   amount,
+                   balanceAfter,
+                   std::ctime(&now));
+
+    // append to history
+    logTransaction(tx); 
+    return true;
+}
+
+
+// withdraw funds from wallet, log tx
+bool WalletManager::withdraw(const std::string& userId,
+                             Wallet& wallet,
+                             double amount)
+{
+    if (!wallet.removeCurrency("USDT", amount)) return false; // not enough
+
+    auto now = std::time(nullptr);
+
+    double balanceAfter = wallet.getBalance("USDT"); // correct balance
+
+    Transaction tx(userId,
+                   TransactionType::WITHDRAW,
+                   "USDT",
+                   amount,
+                   balanceAfter,
+                   std::ctime(&now));
+
+    logTransaction(tx);
+    return true;
+}
+
+// append transaction to csv
+void WalletManager::logTransaction(const Transaction& tx)
+{
+    CSVReader::writeCSV(
+        transactionsCSV,
+        {tx.toCSVRow()},
+        true
+    );
+}
+
+// load all transactions from file
+std::vector<Transaction> WalletManager::loadAllTransactions()
+{
+    std::ifstream file(transactionsCSV);
+    std::vector<Transaction> result;
+    std::string line;
+
+    while (std::getline(file, line))
+    {
+        auto tokens = CSVReader::tokenise(line, ',');
+        if (tokens.size() == 6)
+            result.push_back(Transaction::fromCSVRow(tokens));
+    }
+    return result;
+}
+
+// get last n transactions for a user
+std::vector<Transaction> WalletManager::getRecentTransactions(
+    const std::string& userId,
+    int count)
+{
+    auto all = loadAllTransactions();
+    std::vector<Transaction> filtered;
+
+    // filter for user
+    for (auto& tx : all)
+        if (tx.userId == userId)
+            filtered.push_back(tx);
+
+    // return last count
+    if (filtered.size() <= count) return filtered;
+
+    return std::vector<Transaction>(
+        filtered.end() - count,
+        filtered.end()
+    );
+}
+
+// compute some stats for a user
+void WalletManager::printStatistics(const std::string& userId,
+                                    const std::string& productFilter)
+{
+    auto all = loadAllTransactions();
+
+    int asks = 0, bids = 0;
+    double totalSpent = 0.0;
+
+    for (const auto& tx : all)
+    {
+        if (tx.userId != userId) continue;            // skip others
+        if (!productFilter.empty() && tx.product != productFilter) continue; // filter
+
+        if (tx.type == TransactionType::ASK) asks++;
+        if (tx.type == TransactionType::BID) bids++;
+
+        // only count outgoing money (withdrawals, asks, bids), not deposits
+        if (tx.type == TransactionType::WITHDRAW || tx.type == TransactionType::ASK || tx.type == TransactionType::BID)
+            totalSpent += tx.amount;
+    }
+
+    // print stats
+    std::cout << "ASKS: " << asks << "\n";
+    std::cout << "BIDS: " << bids << "\n";
+    std::cout << "TOTAL SPENT: " << totalSpent << "\n";
+}
+==============================
+FILE: WalletManager.h
+==============================
+#pragma once
+#include "Wallet.h"
+#include "Transaction.h"
+#include "../core/CSVReader.h"
+#include "../core/DateUtils.h"
+#include <vector>
+
+// personal implementation: manages wallets + transaction history
+class WalletManager
+{
+public:
+    WalletManager(const std::string& walletFile,
+                  const std::string& transactionFile);
+
+    // load a wallet from csv
+    Wallet loadWallet(const std::string& userId);
+
+    // save current wallet state
+    void saveWallet(const std::string& userId, Wallet& wallet);
+
+    // deposit and log
+    bool deposit(const std::string& userId, Wallet& wallet, double amount);
+
+    // withdraw and log
+    bool withdraw(const std::string& userId, Wallet& wallet, double amount);
+
+    // get last n transactions
+    std::vector<Transaction> getRecentTransactions(
+        const std::string& userId,
+        int count = 5
+    );
+
+    // compute simple stats for a user
+    void printStatistics(const std::string& userId,
+                         const std::string& productFilter = "");
+
+private:
+    std::string walletsCSV;        // where wallets are saved
+    std::string transactionsCSV;   // transaction log
+
+    // helper: append transaction to csv
+    void logTransaction(const Transaction& tx);
+
+    // load all transactions
+    std::vector<Transaction> loadAllTransactions();
 };

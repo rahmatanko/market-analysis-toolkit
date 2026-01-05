@@ -6,7 +6,8 @@ CXXFLAGS = -std=c++17 -g -Wall -I./core
 SRC = $(wildcard *.cpp) \
       $(wildcard core/*.cpp) \
       $(wildcard market/*.cpp) \
-      $(wildcard user/*.cpp)
+      $(wildcard user/*.cpp) \
+      $(wildcard wallet/*.cpp)
 
 # build folder
 BUILD = build
