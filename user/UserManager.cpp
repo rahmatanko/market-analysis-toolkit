@@ -22,10 +22,10 @@ void UserManager::loadUsers() {
     std::string line;
     while (std::getline(file, line)) {
         std::vector<std::string> tokens = CSVReader::tokenise(line, ',');
-        if (tokens.size() != 5) continue; // skip malformed line
+        if (tokens.size() != 4) continue; // skip malformed line
 
         // create user object and store in vector
-        User user(tokens[1], tokens[2], tokens[3], tokens[0], tokens[4]);
+        User user(tokens[1], tokens[2], tokens[3], tokens[0]);
         users.push_back(user);
     }
 }
@@ -90,13 +90,12 @@ bool UserManager::registerUser(const std::string& fullName,
         return false;
     }
 
-    // generate id, wallet link, hash password
+    // generate id, hash password
     std::string userID = generateUniqueUserID();
-    std::string walletID = userID + "_wallet";
     std::string hashedPassword = hashPassword(password);
 
     // create user object, store in memory and csv
-    User newUser(fullName, email, hashedPassword, userID, walletID);
+    User newUser(fullName, email, hashedPassword, userID);
     users.push_back(newUser);
     saveUser(newUser);
 
@@ -112,6 +111,19 @@ bool UserManager::loginUser(const std::string& userID,
     std::string hashedInput = hashPassword(password);
     for (const auto& u : users) {
         if (u.getUserID() == userID && u.getHashedPassword() == hashedInput) {
+            outUser = u;
+            return true;
+        }
+    }
+    return false;
+}
+
+// login by email
+bool UserManager::loginUserByEmail(const std::string& email, const std::string& password, User& outUser)
+{
+    std::string hashedInput = hashPassword(password);
+    for (const auto& u : users) {
+        if (u.getEmail() == email && u.getHashedPassword() == hashedInput) {
             outUser = u;
             return true;
         }

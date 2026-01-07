@@ -25,7 +25,7 @@ std::vector<OrderBookEntry> CSVReader::readMarketCSV(const std::string& filename
             
             // skip malformed lines
             if (tokens.size() != 5) {
-                std::cout << "CSVReader::readMarketCSV bad data (wrong token count) at line " << lineNum << std::endl;
+                // std::cout << "CSVReader::readMarketCSV bad data (wrong token count) at line " << lineNum << std::endl;
                 continue; // skip this line
             }
 
@@ -36,14 +36,14 @@ std::vector<OrderBookEntry> CSVReader::readMarketCSV(const std::string& filename
             } catch(const std::exception& e)
             {
                 // if the line has invalid floats, just print a message and skip it
-                std::cout << "CSVReader::readMarketCSV bad data (invalid float) at line " << lineNum << std::endl;
+                // std::cout << "CSVReader::readMarketCSV bad data (invalid float) at line " << lineNum << std::endl;
                 continue; // skip this line
             }
         }
     }    
 
     // print how many entries we successfully read
-    std::cout << "CSVReader::readMarketCSV read " << entries.size() << " entries"  << std::endl;
+    // std::cout << "CSVReader::readMarketCSV read " << entries.size() << " entries"  << std::endl;
     return entries; 
 }
 
@@ -86,8 +86,8 @@ OrderBookEntry CSVReader::stringsToOBE(const std::vector<std::string>& tokens)
         price = std::stod(tokens[3]);
         amount = std::stod(tokens[4]);
     }catch(const std::exception& e){
-        std::cout << "CSVReader::stringsToOBE Bad float! " << tokens[3]<< std::endl;
-        std::cout << "CSVReader::stringsToOBE Bad float! " << tokens[4]<< std::endl; 
+        // std::cout << "CSVReader::stringsToOBE Bad float! " << tokens[3]<< std::endl;
+        // std::cout << "CSVReader::stringsToOBE Bad float! " << tokens[4]<< std::endl; 
         throw;        
     }
 
@@ -115,8 +115,8 @@ OrderBookEntry CSVReader::stringsToOBE(std::string priceString,
         price = std::stod(priceString); // convert price to double
         amount = std::stod(amountString); // convert amount to double
     }catch(const std::exception& e){
-        std::cout << "CSVReader::stringsToOBE Bad float! " << priceString<< std::endl;
-        std::cout << "CSVReader::stringsToOBE Bad float! " << amountString<< std::endl; 
+        // std::cout << "CSVReader::stringsToOBE Bad float! " << priceString<< std::endl;
+        // std::cout << "CSVReader::stringsToOBE Bad float! " << amountString<< std::endl; 
         throw;        
     }
 
@@ -315,62 +315,32 @@ public:
 ==============================
 FILE: main.cpp
 ==============================
+#include "ui/Menu.h"
+#include "user/UserManager.h"
+#include "wallet/WalletManager.h"
+#include "market/MarketDataLoader.h"
 #include <iostream>
-#include <vector>
-#include "../market/MarketDataLoader.h"
-#include "../wallet/WalletManager.h"
-#include "../user/User.h"
-#include "../trading/TradeSimulator.h"
 
-int main() 
-{
-    // load market data (starter dataset, task 1)
-    std::string marketCSV = "data/small_market_data.csv";
-    MarketDataLoader marketData(marketCSV);
+int main() {
 
-    // initialize wallet manager with wallets + transaction csv
-    std::string walletsCSV = "data/test_wallets.csv"; // test wallet already has some data
-    std::string transactionsCSV = "data/test_transactions.csv";
-    WalletManager walletManager(walletsCSV, transactionsCSV);
+    // file paths for CSVs 
+    const std::string usersCSV       = "data/users.csv";
+    const std::string walletsCSV     = "data/wallets.csv";
+    const std::string transactionsCSV = "data/transactions.csv";
+    const std::string marketCSV      = "data/big_market.csv";
 
-    // create a sample user manually (normally would load from user csv)
-    std::string fullName = "Alice Example";
-    std::string email = "alice@example.com";
-    std::string hashedPassword = "dummyhashed"; // just for testing
-    std::string userID = "1234567890";
-    std::string walletID = userID; // 1:1 mapping for simplicity
-    User user(fullName, email, hashedPassword, userID, walletID);
+    // initialize core managers with CSV paths
+    UserManager userManager(usersCSV);                          
+    WalletManager walletManager(walletsCSV, transactionsCSV);  
+    MarketDataLoader marketData(marketCSV);                    
 
-    // print info to show we loaded user
-    std::cout << "user: " << fullName << " | id: " << user.getUserID() << "\n";
+    // create menu with references to managers
+    Menu menu(userManager, walletManager, marketData);
 
-    // initialize trade simulator
-    TradeSimulator simulator(marketData, walletManager);
+    // start main loop
+    menu.run();
 
-    // run simulation for the test user
-    std::cout << "simulating trades...\n";
-    simulator.simulateTrades(user);
-
-    // reload wallet to show updated balances
-    std::cout << "loading wallet after trades...\n";
-    Wallet wallet = walletManager.loadWallet(user.getWalletID());
-    std::cout << wallet << "\n"; // 
-
-    // print recent transactions to confirm trades
-    std::cout << "recent transactions (last 5):\n";
-    std::vector<Transaction> recentTxs = walletManager.getRecentTransactions(user.getUserID(), 5);
-    for (const auto& tx : recentTxs)
-    {
-        std::cout << "[" << tx.timestamp << "] "
-                  << Transaction::typeToString(tx.type) << " "
-                  << tx.product << " "
-                  << tx.amount << " | balance after: " 
-                  << tx.balanceAfter << "\n";
-    }
-
-    // done
-    std::cout << "task 4 simulation test complete\n";
-    return 0;
+    return 0; // normally never reached
 }
 
 ==============================
@@ -768,119 +738,158 @@ double TradeSimulator::generatePrice(double basePrice)
 
 void TradeSimulator::simulateTrades(const User& user) 
 {
+    std::cout << BOLD << CYAN
+              << "\n[ SIMULATION ] Starting trade simulation for user "
+              << user.getFullName()
+              << RESET << "\n";
+
     // load the user's wallet from csv
-    Wallet wallet = walletManager.loadWallet(user.getWalletID());
+    Wallet wallet = walletManager.loadWallet(user.getUserID());
+
+    std::cout << GRAY << "[SIM] Initial wallet state loaded\n" << RESET;
 
     // list of known products to simulate trades for
     std::vector<std::string> knownProducts = marketData.getAllProducts();
 
-    // loop over each product
     for (const std::string& product : knownProducts)
     {
-        // compute yearly candlesticks to get a stable historical price
         auto candles = marketData.computeCandlesticks(
             product,
             OrderBookType::ask,
             Timeframe::Yearly
         );
 
-        // if no historical data exists, skip this product
         if (candles.empty())
             continue;
 
-        // use the last known close price as reference
         double basePrice = candles.back().close;
-
-        // extract base currency from product string (e.g., "BTC" from "BTC/USDT")
         std::string baseCurrency = product.substr(0, product.find('/'));
 
-        // create 5 bids and 5 asks for this product
+        std::cout << BOLD << MAGENTA
+                  << "\n[PRODUCT] " << product
+                  << " | Reference price: " << basePrice
+                  << RESET << "\n";
+
         for (int i = 0; i < 5; ++i)
         {
             std::string timestamp = getCurrentTimestamp();
             double price = generatePrice(basePrice);
 
-            // calculate amount for bid (buying)
-            double maxAffordable = wallet.getBalance("USDT") / price; // max amount user can buy
-            double bidAmount = std::min(1.0, maxAffordable);          // buy 1 unit or as much as possible
-            if (bidAmount <= 0) continue;                             // skip if nothing can be bought
-
-            // create a bid order (user buys the asset)
-            OrderBookEntry bid(
-                price,
-                bidAmount,
-                timestamp,
-                product,
-                OrderBookType::bidsale,   // bidsale so processSale works
-                user.getUserID()
-            );
-
-            // check if wallet can afford the bid
-            if (wallet.canFulfillOrder(bid))
+            // bid/buy
+            double maxAffordable = wallet.getBalance("USDT") / price;
+            double bidAmount = std::min(1.0, maxAffordable);
+            if (bidAmount > 0)
             {
-                // update wallet balances
-                wallet.processSale(bid);
-
-                // log bid transaction via public logTransaction
-                Transaction tx(
-                    user.getUserID(),
-                    TransactionType::BID,
+                OrderBookEntry bid(
+                    price,
+                    bidAmount,
+                    timestamp,
                     product,
-                    price * bidAmount,
-                    wallet.getBalance("USDT"),
-                    timestamp
+                    OrderBookType::bidsale,
+                    user.getUserID()
                 );
 
-                // persist transaction
-                walletManager.logTransaction(tx);
+                std::cout << CYAN
+                          << "[SIM-BID] Buy " << bidAmount << " "
+                          << baseCurrency << " @ " << price
+                          << RESET << "\n";
+
+                if (wallet.canFulfillOrder(bid))
+                {
+                    wallet.processSale(bid);
+
+                    Transaction tx(
+                        user.getUserID(),
+                        TransactionType::BID,
+                        product,
+                        price * bidAmount,
+                        wallet.getBalance("USDT"),
+                        timestamp
+                    );
+
+                    walletManager.logTransaction(tx);
+
+                    std::cout << GREEN
+                              << "  ✔ Feasible | USDT → "
+                              << wallet.getBalance("USDT")
+                              << RESET << "\n";
+                }
+                else
+                {
+                    std::cout << RED
+                              << "  ✘ Rejected (insufficient USDT)"
+                              << RESET << "\n";
+                }
             }
 
-            // calculate amount for ask (selling)
-            double assetBalance = wallet.getBalance(baseCurrency);    // e.g., BTC or ETH
-            double askAmount = std::min(1.0, assetBalance);           // sell 1 unit or as much as possible
-            if (askAmount <= 0) continue;                             // skip if none to sell
-
-            // create an ask order (user sells the asset)
-            OrderBookEntry ask(
-                price,
-                askAmount,
-                timestamp,
-                product,
-                OrderBookType::asksale,  // asksale so processSale works
-                user.getUserID()
-            );
-
-            // check if wallet can fulfill the ask
-            if (wallet.canFulfillOrder(ask))
+            // ask/sell
+            double assetBalance = wallet.getBalance(baseCurrency);
+            double askAmount = std::min(1.0, assetBalance);
+            if (askAmount > 0)
             {
-                // update wallet balances
-                wallet.processSale(ask);
-
-                // log ask transaction via public logTransaction
-                Transaction tx(
-                    user.getUserID(),
-                    TransactionType::ASK,
+                OrderBookEntry ask(
+                    price,
+                    askAmount,
+                    timestamp,
                     product,
-                    price * askAmount,
-                    wallet.getBalance("USDT"),
-                    timestamp
+                    OrderBookType::asksale,
+                    user.getUserID()
                 );
 
-                // persist transaction
-                walletManager.logTransaction(tx);
+                std::cout << YELLOW
+                          << "[SIM-ASK] Sell " << askAmount << " "
+                          << baseCurrency << " @ " << price
+                          << RESET << "\n";
+
+                if (wallet.canFulfillOrder(ask))
+                {
+                    wallet.processSale(ask);
+
+                    Transaction tx(
+                        user.getUserID(),
+                        TransactionType::ASK,
+                        product,
+                        price * askAmount,
+                        wallet.getBalance("USDT"),
+                        timestamp
+                    );
+
+                    walletManager.logTransaction(tx);
+
+                    std::cout << GREEN
+                              << "  ✔ Feasible | USDT → "
+                              << wallet.getBalance("USDT")
+                              << RESET << "\n";
+                }
+                else
+                {
+                    std::cout << RED
+                              << "  ✘ Rejected (insufficient asset)"
+                              << RESET << "\n";
+                }
             }
         }
     }
-    // remove tiny leftover fractions for cleanliness
+
+    // cleanup tiny dust
     for (auto& [currency, amount] : wallet.getAllBalances())
     {
-        if (amount < 1e-6) // treat as zero
+        if (amount < 1e-6)
             wallet.removeCurrency(currency, amount);
     }
 
-    // final save to ensure wallet state is stored
     walletManager.saveWallet(user.getUserID(), wallet);
+
+    std::cout << BOLD << CYAN
+              << "\n[ SIMULATION COMPLETE ]"
+              << RESET << "\n"
+              << GRAY
+              << "• Trades evaluated using historical prices\n"
+              << "• Transactions logged\n"
+              << "• Wallet state finalized\n"
+              << RESET;
 }
+
 
 
 
@@ -895,6 +904,17 @@ FILE: TradeSimulator.h
 #include "../market/MarketDataLoader.h"
 #include "../wallet/WalletManager.h"
 #include "../user/User.h"
+
+// ANSI colors
+#define RESET   "\033[0m"
+#define BOLD    "\033[1m"
+#define CYAN    "\033[36m"
+#define GREEN   "\033[32m"
+#define YELLOW  "\033[33m"
+#define RED     "\033[31m"
+#define MAGENTA "\033[35m"
+#define GRAY    "\033[90m"
+
 
 // personal implementation
 // responsible for simulating user trading activity (task 4)
@@ -925,6 +945,495 @@ private:
 };
 
 ==============================
+FILE: Menu.cpp
+==============================
+#include "Menu.h"
+#include <iostream>
+#include <limits>
+
+// personal implementation
+
+// colors for terminal
+#define BLUE "\033[1;34m"
+#define GREEN "\033[1;32m"
+#define RED "\033[1;31m"
+#define YELLOW "\033[1;33m"
+#define RESET "\033[0m"
+
+// constructor stores references
+Menu::Menu(UserManager &userMgr,
+           WalletManager &walletMgr,
+           MarketDataLoader &market)
+    : userManager(userMgr),
+      walletManager(walletMgr),
+      marketData(market)
+{
+}
+
+// main loop
+void Menu::run()
+{
+    while (true)
+    {
+        if (!loggedIn)
+            showWelcomeMenu(); // ask user to login/register
+        else
+            showMainMenu(); // main functionality menu
+    }
+}
+
+// welcome menu
+void Menu::showWelcomeMenu()
+{
+    std::cout << BLUE << "\n╔════════════════════╗\n"
+              << "║      WELCOME       ║\n"
+              << "╚════════════════════╝" << RESET << "\n";
+
+    // options
+    std::cout << "1. Register\n";
+    std::cout << "2. Login\n";
+    std::cout << "3. Exit\n";
+    std::cout << YELLOW << "Select option: " << RESET;
+
+    int choice;
+    std::cin >> choice;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    // route choice
+    switch (choice)
+    {
+    case 1:
+        handleRegister();
+        break;
+    case 2:
+        handleLogin();
+        break;
+    case 3:
+        exit(0); // exit program
+    default:
+        std::cout << RED << "Invalid option.\n"
+                  << RESET;
+    }
+}
+
+// main menu
+void Menu::showMainMenu()
+{
+    const int width = 50; // total width of the box
+    std::string title = "MAIN MENU (" + currentUser.getFullName() + ")";
+    int padding = (width - 2 - title.size()) / 2; // subtract 2 for box edges
+
+    // top border
+    std::cout << GREEN << "\n╔";
+    for (int i = 0; i < width - 2; ++i)
+        std::cout << "═";
+    std::cout << "╗\n";
+
+    // title line
+    std::cout << "║";
+    for (int i = 0; i < padding; ++i)
+        std::cout << " ";
+    std::cout << title;
+    for (int i = 0; i < width - 2 - padding - title.size(); ++i)
+        std::cout << " ";
+    std::cout << "║\n";
+
+    // bottom border
+    std::cout << "╚";
+    for (int i = 0; i < width - 2; ++i)
+        std::cout << "═";
+    std::cout << "╝" << RESET << "\n";
+
+    // menu options
+    std::cout << " 1. Deposit\n"
+              << " 2. Withdraw\n"
+              << " 3. View Wallet\n"
+              << " 4. Simulate Trades\n"
+              << " 5. Recent Transactions\n"
+              << " 6. User Statistics\n"
+              << " 7. View Candlesticks\n"
+              << " 8. Logout\n";
+    std::cout << YELLOW << "Select option: " << RESET;
+
+    int choice;
+    std::cin >> choice;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    // route choice
+    switch (choice)
+    {
+    case 1:
+        handleDeposit();
+        break;
+    case 2:
+        handleWithdraw();
+        break;
+    case 3:
+        handleViewWallet();
+        break;
+    case 4:
+        handleSimulateTrades();
+        break;
+    case 5:
+        handleViewTransactions();
+        break;
+    case 6:
+        handlePrintStatistics();
+        break;
+    case 7:
+        handleViewCandlesticks();
+        break;
+    case 8:
+        loggedIn = false; // logout
+        std::cout << BLUE << "Logged out.\n"
+                  << RESET;
+        break;
+    default:
+        std::cout << RED << "Invalid option.\n"
+                  << RESET;
+    }
+}
+
+// register action
+void Menu::handleRegister()
+{
+    std::string name = promptString("Full Name: ");
+    std::string email = promptString("Email: ");
+    std::string password = promptString("Password: ");
+
+    User newUser;
+    if (userManager.registerUser(name, email, password, newUser))
+    {
+        std::cout << GREEN << "✔ User registered successfully! You can now login.\n"
+                  << RESET;
+    }
+    else
+    {
+        std::cout << RED << "✖ Registration failed: user may already exist.\n"
+                  << RESET;
+    }
+}
+
+// login action
+void Menu::handleLogin()
+{
+    // ask for email instead of internal user ID
+    std::string email = promptString("Email: ");
+    std::string password = promptString("Password: ");
+
+    // loginUser should accept email now instead of userID
+    if (userManager.loginUserByEmail(email, password, currentUser))
+    {
+        std::cout << GREEN << "✔ Login successful!\n"
+                  << RESET;
+        loggedIn = true;
+    }
+    else
+    {
+        std::cout << RED << "✖ Login failed: invalid credentials.\n"
+                  << RESET;
+    }
+}
+
+// deposit action
+void Menu::handleDeposit()
+{
+    double amount = promptDouble("Amount to deposit: ");
+    std::string asset = promptString("Asset (default USDT): ");
+    if (asset.empty())
+        asset = "USDT"; // default asset
+
+    Wallet wallet = walletManager.loadWallet(currentUser.getUserID());
+    if (walletManager.deposit(currentUser.getUserID(), wallet, amount, asset))
+    {
+        std::cout << GREEN << "✔ Deposit successful.\n"
+                  << RESET;
+    }
+    else
+    {
+        std::cout << RED << "✖ Deposit failed.\n"
+                  << RESET;
+    }
+}
+
+// withdraw action
+void Menu::handleWithdraw()
+{
+    double amount = promptDouble("Amount to withdraw: ");
+    std::string asset = promptString("Asset (default USDT): ");
+    if (asset.empty())
+        asset = "USDT";
+
+    Wallet wallet = walletManager.loadWallet(currentUser.getUserID());
+    if (walletManager.withdraw(currentUser.getUserID(), wallet, amount, asset))
+    {
+        std::cout << GREEN << "✔ Withdrawal successful.\n"
+                  << RESET;
+    }
+    else
+    {
+        std::cout << RED << "✖ Withdrawal failed: insufficient funds.\n"
+                  << RESET;
+    }
+}
+
+// view wallet
+void Menu::handleViewWallet()
+{
+    Wallet wallet = walletManager.loadWallet(currentUser.getUserID());
+    std::cout << BLUE << "\n--- Wallet Balances ---\n"
+              << RESET;
+    for (const auto &[currency, amount] : wallet.getAllBalances())
+    {
+        std::cout << "  • " << currency << ": " << amount << "\n";
+    }
+}
+
+// simulate trades
+void Menu::handleSimulateTrades()
+{
+    Wallet wallet = walletManager.loadWallet(currentUser.getUserID());
+    TradeSimulator simulator(marketData, walletManager);
+    simulator.simulateTrades(currentUser); // run simulation
+    std::cout << GREEN << "✔ Simulated trades completed.\n"
+              << RESET;
+}
+
+// view recent transactions
+void Menu::handleViewTransactions()
+{
+    auto txs = walletManager.getRecentTransactions(currentUser.getUserID(), 5);
+    std::cout << BLUE << "\n--- Last " << txs.size() << " Transactions ---\n"
+              << RESET;
+
+    // column widths 
+    constexpr int textw = 9;
+    constexpr int numw = 14;
+
+    for (const auto &tx : txs)
+    {
+        std::cout << "  • "
+                  << std::left << std::setw(3) << Transaction::typeToString(tx.type) << " | "
+                  << std::left << std::setw(textw) << tx.product << " | "
+                  << std::right << std::setw(numw) << std::fixed << std::setprecision(4)
+                  << tx.amount << " | "
+                  << std::right << std::setw(numw) << std::fixed << std::setprecision(4)
+                  << tx.balanceAfter << " | "
+                  << std::left << tx.timestamp
+                  << std::endl;
+    }
+}
+
+// print statistics
+void Menu::handlePrintStatistics()
+{
+    std::cout << BLUE << "\n--- User Statistics ---\n"
+              << RESET;
+    walletManager.printStatistics(currentUser.getUserID());
+}
+
+// view candlesticks
+void Menu::handleViewCandlesticks()
+{
+    std::vector<std::string> products = marketData.getAllProducts();
+    if (products.empty())
+    {
+        std::cout << RED << "No products available.\n"
+                  << RESET;
+        return;
+    }
+
+    std::cout << BLUE << "Available products:\n"
+              << RESET;
+    for (size_t i = 0; i < products.size(); ++i)
+        std::cout << "  " << i + 1 << ". " << products[i] << "\n";
+
+    int choice;
+    std::cout << YELLOW << "Select product: " << RESET;
+    std::cin >> choice;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    if (choice < 1 || choice > products.size())
+    {
+        std::cout << RED << "Invalid selection.\n"
+                  << RESET;
+        return;
+    }
+
+    std::string product = products[choice - 1];
+
+    // select candlestick resolution (granularity)
+    std::cout << BLUE << "\nSelect timeframe:\n"
+              << RESET;
+    std::cout << "  1. Yearly\n";
+    std::cout << "  2. Daily\n";
+    std::cout << "  3. Hourly\n";
+    std::cout << "  4. Minutely\n";
+    std::cout << "  5. Secondly\n";
+
+    int tfChoice;
+    std::cout << YELLOW << "Timeframe: " << RESET;
+    std::cin >> tfChoice;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    Timeframe timeframe;
+    switch (tfChoice)
+    {
+        case 1: timeframe = Timeframe::Yearly;   break;
+        case 2: timeframe = Timeframe::Daily;    break;
+        case 3: timeframe = Timeframe::Hourly;   break;
+        case 4: timeframe = Timeframe::Minutely; break;
+        case 5: timeframe = Timeframe::Secondly; break;
+        default:
+            std::cout << RED << "Invalid timeframe.\n"
+                      << RESET;
+            return;
+    }
+
+    // compute candlesticks for chosen product + timeframe
+    auto candles = marketData.computeCandlesticks(
+        product,
+        OrderBookType::ask,
+        timeframe
+    );
+
+    if (candles.empty())
+    {
+        std::cout << RED << "No candlestick data available.\n"
+                  << RESET;
+        return;
+    }
+
+    // select how many results to display (prevent terminal spam)
+    std::cout << BLUE << "\nDisplay how many candles:\n"
+              << RESET;
+    std::cout << "  1. Last 5\n";
+    std::cout << "  2. Last 10\n";
+    std::cout << "  3. Last 20\n";
+    std::cout << "  4. Last 50\n";
+    std::cout << "  5. All\n";
+
+    int limitChoice;
+    std::cout << YELLOW << "Selection: " << RESET;
+    std::cin >> limitChoice;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    size_t limit;
+    switch (limitChoice)
+    {
+        case 1: limit = 5;  break;
+        case 2: limit = 10; break;
+        case 3: limit = 20; break;
+        case 4: limit = 50; break;
+        case 5: limit = candles.size(); break;
+        default:
+            std::cout << RED << "Invalid selection.\n"
+                      << RESET;
+            return;
+    }
+
+    // determine starting index so we only print the most recent candles
+    size_t start = (candles.size() > limit) ? candles.size() - limit : 0;
+
+    std::cout << BLUE << "\n--- Candlesticks for " << product << " ---\n"
+              << RESET;
+
+    for (size_t i = start; i < candles.size(); ++i)
+    {
+        const auto &c = candles[i];
+        std::cout << "  • " << CYAN << c.date << RESET
+                  << " | O: " << GREEN << c.open << RESET
+                  << " H: " << GREEN << c.high << RESET
+                  << " L: " << RED   << c.low  << RESET
+                  << " C: " << YELLOW << c.close << RESET
+                  << std::endl;
+    }
+}
+
+
+// prompt helpers
+std::string Menu::promptString(const std::string &msg)
+{
+    std::cout << msg;
+    std::string s;
+    std::getline(std::cin, s); // read full line
+    return s;
+}
+
+double Menu::promptDouble(const std::string &msg)
+{
+    double val;
+    while (true)
+    {
+        std::cout << msg;
+        std::cin >> val;
+        if (!std::cin.fail())
+        {
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return val; // valid input
+        }
+        // input failed, clear and retry
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        std::cout << RED << "Invalid number, try again.\n"
+                  << RESET;
+    }
+}
+
+==============================
+FILE: Menu.h
+==============================
+#pragma once
+#include "../user/UserManager.h"
+#include "../wallet/WalletManager.h"
+#include "../trading/TradeSimulator.h"
+#include "../market/MarketDataLoader.h"
+#include "../market/Candlestick.h"
+#include <string>
+#include <memory>
+#include <vector>
+#include <iomanip>
+
+// personal implementation for this project
+class Menu {
+public:
+    // constructor: store references to the main managers, no copies
+    Menu(UserManager& userManager,
+         WalletManager& walletManager,
+         MarketDataLoader& marketData);
+
+    // main loop: keeps showing menus until exit
+    void run();
+
+private:
+    UserManager& userManager;
+    WalletManager& walletManager;
+    MarketDataLoader& marketData;
+
+    User currentUser; // current logged-in user
+    bool loggedIn = false; // login state
+
+    // menus
+    void showWelcomeMenu(); // login/register
+    void showMainMenu(); // after login
+
+    // actions 
+    void handleRegister(); // register new user
+    void handleLogin(); // login existing user
+    void handleDeposit(); // deposit funds
+    void handleWithdraw(); // withdraw funds
+    void handleViewWallet(); // view wallet balances
+    void handleSimulateTrades(); // run trade simulation
+    void handleViewTransactions(); // last few transactions
+    void handlePrintStatistics(); // user stats
+    void handleViewCandlesticks(); // view candlestick chart for a product
+
+    // helpers
+    std::string promptString(const std::string& msg); // read line from stdin
+    double promptDouble(const std::string& msg); // read double from stdin
+};
+
+==============================
 FILE: User.cpp
 ==============================
 #include "User.h"
@@ -936,13 +1445,11 @@ FILE: User.cpp
 User::User(const std::string& fullName,
            const std::string& email,
            const std::string& hashedPassword,
-           const std::string& userID,
-           const std::string& walletID)
+           const std::string& userID)
     : fullName(fullName),
       email(email),
       hashedPassword(hashedPassword),
-      userID(userID),
-      walletID(walletID)
+      userID(userID)
 {
 }
 
@@ -951,11 +1458,10 @@ std::string User::getUserID() const { return userID; }
 std::string User::getFullName() const { return fullName; }
 std::string User::getEmail() const { return email; }
 std::string User::getHashedPassword() const { return hashedPassword; }
-std::string User::getWalletID() const { return walletID; }
 
 // convert user fields to csv row
 std::vector<std::string> User::toCSVRow() const {
-    return {userID, fullName, email, hashedPassword, walletID};
+    return {userID, fullName, email, hashedPassword};
 }
 
 ==============================
@@ -974,15 +1480,13 @@ public:
     User(const std::string& fullName,
          const std::string& email,
          const std::string& hashedPassword,
-         const std::string& userID,
-         const std::string& walletID);
+         const std::string& userID);
 
     // getters
     std::string getUserID() const;         // return unique 10-digit ID
     std::string getFullName() const;       // return full name
     std::string getEmail() const;          // return email
     std::string getHashedPassword() const; // return hashed password
-    std::string getWalletID() const;       // return linked wallet ID
 
     // convert user to csv row for saving
     std::vector<std::string> toCSVRow() const;
@@ -992,7 +1496,6 @@ private:
     std::string fullName;      // user's full name
     std::string email;         // user's email
     std::string hashedPassword; // hashed password using std::hash<string>
-    std::string walletID;      // link to wallet CSV
 };
 
 ==============================
@@ -1022,10 +1525,10 @@ void UserManager::loadUsers() {
     std::string line;
     while (std::getline(file, line)) {
         std::vector<std::string> tokens = CSVReader::tokenise(line, ',');
-        if (tokens.size() != 5) continue; // skip malformed line
+        if (tokens.size() != 4) continue; // skip malformed line
 
         // create user object and store in vector
-        User user(tokens[1], tokens[2], tokens[3], tokens[0], tokens[4]);
+        User user(tokens[1], tokens[2], tokens[3], tokens[0]);
         users.push_back(user);
     }
 }
@@ -1090,13 +1593,12 @@ bool UserManager::registerUser(const std::string& fullName,
         return false;
     }
 
-    // generate id, wallet link, hash password
+    // generate id, hash password
     std::string userID = generateUniqueUserID();
-    std::string walletID = userID + "_wallet";
     std::string hashedPassword = hashPassword(password);
 
     // create user object, store in memory and csv
-    User newUser(fullName, email, hashedPassword, userID, walletID);
+    User newUser(fullName, email, hashedPassword, userID);
     users.push_back(newUser);
     saveUser(newUser);
 
@@ -1112,6 +1614,19 @@ bool UserManager::loginUser(const std::string& userID,
     std::string hashedInput = hashPassword(password);
     for (const auto& u : users) {
         if (u.getUserID() == userID && u.getHashedPassword() == hashedInput) {
+            outUser = u;
+            return true;
+        }
+    }
+    return false;
+}
+
+// login by email
+bool UserManager::loginUserByEmail(const std::string& email, const std::string& password, User& outUser)
+{
+    std::string hashedInput = hashPassword(password);
+    for (const auto& u : users) {
+        if (u.getEmail() == email && u.getHashedPassword() == hashedInput) {
             outUser = u;
             return true;
         }
@@ -1149,6 +1664,9 @@ public:
     bool loginUser(const std::string& userID,
                    const std::string& password,
                    User& outUser);
+
+    // login by email
+    bool loginUserByEmail(const std::string& email, const std::string& password, User& outUser);
 
     // return all loaded users
     std::vector<User> getAllUsers() const;

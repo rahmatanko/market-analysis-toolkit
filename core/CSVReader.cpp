@@ -21,7 +21,7 @@ std::vector<OrderBookEntry> CSVReader::readMarketCSV(const std::string& filename
             
             // skip malformed lines
             if (tokens.size() != 5) {
-                std::cout << "CSVReader::readMarketCSV bad data (wrong token count) at line " << lineNum << std::endl;
+                // std::cout << "CSVReader::readMarketCSV bad data (wrong token count) at line " << lineNum << std::endl;
                 continue; // skip this line
             }
 
@@ -32,14 +32,14 @@ std::vector<OrderBookEntry> CSVReader::readMarketCSV(const std::string& filename
             } catch(const std::exception& e)
             {
                 // if the line has invalid floats, just print a message and skip it
-                std::cout << "CSVReader::readMarketCSV bad data (invalid float) at line " << lineNum << std::endl;
+                // std::cout << "CSVReader::readMarketCSV bad data (invalid float) at line " << lineNum << std::endl;
                 continue; // skip this line
             }
         }
     }    
 
     // print how many entries we successfully read
-    std::cout << "CSVReader::readMarketCSV read " << entries.size() << " entries"  << std::endl;
+    // std::cout << "CSVReader::readMarketCSV read " << entries.size() << " entries"  << std::endl;
     return entries; 
 }
 
@@ -82,8 +82,8 @@ OrderBookEntry CSVReader::stringsToOBE(const std::vector<std::string>& tokens)
         price = std::stod(tokens[3]);
         amount = std::stod(tokens[4]);
     }catch(const std::exception& e){
-        std::cout << "CSVReader::stringsToOBE Bad float! " << tokens[3]<< std::endl;
-        std::cout << "CSVReader::stringsToOBE Bad float! " << tokens[4]<< std::endl; 
+        // std::cout << "CSVReader::stringsToOBE Bad float! " << tokens[3]<< std::endl;
+        // std::cout << "CSVReader::stringsToOBE Bad float! " << tokens[4]<< std::endl; 
         throw;        
     }
 
@@ -111,8 +111,8 @@ OrderBookEntry CSVReader::stringsToOBE(std::string priceString,
         price = std::stod(priceString); // convert price to double
         amount = std::stod(amountString); // convert amount to double
     }catch(const std::exception& e){
-        std::cout << "CSVReader::stringsToOBE Bad float! " << priceString<< std::endl;
-        std::cout << "CSVReader::stringsToOBE Bad float! " << amountString<< std::endl; 
+        // std::cout << "CSVReader::stringsToOBE Bad float! " << priceString<< std::endl;
+        // std::cout << "CSVReader::stringsToOBE Bad float! " << amountString<< std::endl; 
         throw;        
     }
 

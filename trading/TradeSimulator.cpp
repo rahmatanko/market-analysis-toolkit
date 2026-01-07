@@ -39,118 +39,157 @@ double TradeSimulator::generatePrice(double basePrice)
 
 void TradeSimulator::simulateTrades(const User& user) 
 {
+    std::cout << BOLD << CYAN
+              << "\n[ SIMULATION ] Starting trade simulation for user "
+              << user.getFullName()
+              << RESET << "\n";
+
     // load the user's wallet from csv
-    Wallet wallet = walletManager.loadWallet(user.getWalletID());
+    Wallet wallet = walletManager.loadWallet(user.getUserID());
+
+    std::cout << GRAY << "[SIM] Initial wallet state loaded\n" << RESET;
 
     // list of known products to simulate trades for
     std::vector<std::string> knownProducts = marketData.getAllProducts();
 
-    // loop over each product
     for (const std::string& product : knownProducts)
     {
-        // compute yearly candlesticks to get a stable historical price
         auto candles = marketData.computeCandlesticks(
             product,
             OrderBookType::ask,
             Timeframe::Yearly
         );
 
-        // if no historical data exists, skip this product
         if (candles.empty())
             continue;
 
-        // use the last known close price as reference
         double basePrice = candles.back().close;
-
-        // extract base currency from product string (e.g., "BTC" from "BTC/USDT")
         std::string baseCurrency = product.substr(0, product.find('/'));
 
-        // create 5 bids and 5 asks for this product
+        std::cout << BOLD << MAGENTA
+                  << "\n[PRODUCT] " << product
+                  << " | Reference price: " << basePrice
+                  << RESET << "\n";
+
         for (int i = 0; i < 5; ++i)
         {
             std::string timestamp = getCurrentTimestamp();
             double price = generatePrice(basePrice);
 
-            // calculate amount for bid (buying)
-            double maxAffordable = wallet.getBalance("USDT") / price; // max amount user can buy
-            double bidAmount = std::min(1.0, maxAffordable);          // buy 1 unit or as much as possible
-            if (bidAmount <= 0) continue;                             // skip if nothing can be bought
-
-            // create a bid order (user buys the asset)
-            OrderBookEntry bid(
-                price,
-                bidAmount,
-                timestamp,
-                product,
-                OrderBookType::bidsale,   // bidsale so processSale works
-                user.getUserID()
-            );
-
-            // check if wallet can afford the bid
-            if (wallet.canFulfillOrder(bid))
+            // bid/buy
+            double maxAffordable = wallet.getBalance("USDT") / price;
+            double bidAmount = std::min(1.0, maxAffordable);
+            if (bidAmount > 0)
             {
-                // update wallet balances
-                wallet.processSale(bid);
-
-                // log bid transaction via public logTransaction
-                Transaction tx(
-                    user.getUserID(),
-                    TransactionType::BID,
+                OrderBookEntry bid(
+                    price,
+                    bidAmount,
+                    timestamp,
                     product,
-                    price * bidAmount,
-                    wallet.getBalance("USDT"),
-                    timestamp
+                    OrderBookType::bidsale,
+                    user.getUserID()
                 );
 
-                // persist transaction
-                walletManager.logTransaction(tx);
+                std::cout << CYAN
+                          << "[SIM-BID] Buy " << bidAmount << " "
+                          << baseCurrency << " @ " << price
+                          << RESET << "\n";
+
+                if (wallet.canFulfillOrder(bid))
+                {
+                    wallet.processSale(bid);
+
+                    Transaction tx(
+                        user.getUserID(),
+                        TransactionType::BID,
+                        product,
+                        price * bidAmount,
+                        wallet.getBalance("USDT"),
+                        timestamp
+                    );
+
+                    walletManager.logTransaction(tx);
+
+                    std::cout << GREEN
+                              << "  ✔ Feasible | USDT → "
+                              << wallet.getBalance("USDT")
+                              << RESET << "\n";
+                }
+                else
+                {
+                    std::cout << RED
+                              << "  ✘ Rejected (insufficient USDT)"
+                              << RESET << "\n";
+                }
             }
 
-            // calculate amount for ask (selling)
-            double assetBalance = wallet.getBalance(baseCurrency);    // e.g., BTC or ETH
-            double askAmount = std::min(1.0, assetBalance);           // sell 1 unit or as much as possible
-            if (askAmount <= 0) continue;                             // skip if none to sell
-
-            // create an ask order (user sells the asset)
-            OrderBookEntry ask(
-                price,
-                askAmount,
-                timestamp,
-                product,
-                OrderBookType::asksale,  // asksale so processSale works
-                user.getUserID()
-            );
-
-            // check if wallet can fulfill the ask
-            if (wallet.canFulfillOrder(ask))
+            // ask/sell
+            double assetBalance = wallet.getBalance(baseCurrency);
+            double askAmount = std::min(1.0, assetBalance);
+            if (askAmount > 0)
             {
-                // update wallet balances
-                wallet.processSale(ask);
-
-                // log ask transaction via public logTransaction
-                Transaction tx(
-                    user.getUserID(),
-                    TransactionType::ASK,
+                OrderBookEntry ask(
+                    price,
+                    askAmount,
+                    timestamp,
                     product,
-                    price * askAmount,
-                    wallet.getBalance("USDT"),
-                    timestamp
+                    OrderBookType::asksale,
+                    user.getUserID()
                 );
 
-                // persist transaction
-                walletManager.logTransaction(tx);
+                std::cout << YELLOW
+                          << "[SIM-ASK] Sell " << askAmount << " "
+                          << baseCurrency << " @ " << price
+                          << RESET << "\n";
+
+                if (wallet.canFulfillOrder(ask))
+                {
+                    wallet.processSale(ask);
+
+                    Transaction tx(
+                        user.getUserID(),
+                        TransactionType::ASK,
+                        product,
+                        price * askAmount,
+                        wallet.getBalance("USDT"),
+                        timestamp
+                    );
+
+                    walletManager.logTransaction(tx);
+
+                    std::cout << GREEN
+                              << "  ✔ Feasible | USDT → "
+                              << wallet.getBalance("USDT")
+                              << RESET << "\n";
+                }
+                else
+                {
+                    std::cout << RED
+                              << "  ✘ Rejected (insufficient asset)"
+                              << RESET << "\n";
+                }
             }
         }
     }
-    // remove tiny leftover fractions for cleanliness
+
+    // cleanup tiny dust
     for (auto& [currency, amount] : wallet.getAllBalances())
     {
-        if (amount < 1e-6) // treat as zero
+        if (amount < 1e-6)
             wallet.removeCurrency(currency, amount);
     }
 
-    // final save to ensure wallet state is stored
     walletManager.saveWallet(user.getUserID(), wallet);
+
+    std::cout << BOLD << CYAN
+              << "\n[ SIMULATION COMPLETE ]"
+              << RESET << "\n"
+              << GRAY
+              << "• Trades evaluated using historical prices\n"
+              << "• Transactions logged\n"
+              << "• Wallet state finalized\n"
+              << RESET;
 }
+
 
 

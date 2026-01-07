@@ -1,57 +1,27 @@
+#include "ui/Menu.h"
+#include "user/UserManager.h"
+#include "wallet/WalletManager.h"
+#include "market/MarketDataLoader.h"
 #include <iostream>
-#include <vector>
-#include "../market/MarketDataLoader.h"
-#include "../wallet/WalletManager.h"
-#include "../user/User.h"
-#include "../trading/TradeSimulator.h"
 
-int main() 
-{
-    // load market data (starter dataset, task 1)
-    std::string marketCSV = "data/small_market_data.csv";
-    MarketDataLoader marketData(marketCSV);
+int main() {
 
-    // initialize wallet manager with wallets + transaction csv
-    std::string walletsCSV = "data/test_wallets.csv"; // test wallet already has some data
-    std::string transactionsCSV = "data/test_transactions.csv";
-    WalletManager walletManager(walletsCSV, transactionsCSV);
+    // file paths for CSVs 
+    const std::string usersCSV       = "data/users.csv";
+    const std::string walletsCSV     = "data/wallets.csv";
+    const std::string transactionsCSV = "data/transactions.csv";
+    const std::string marketCSV      = "data/big_market.csv";
 
-    // create a sample user manually (normally would load from user csv)
-    std::string fullName = "Alice Example";
-    std::string email = "alice@example.com";
-    std::string hashedPassword = "dummyhashed"; // just for testing
-    std::string userID = "1234567890";
-    std::string walletID = userID; // 1:1 mapping for simplicity
-    User user(fullName, email, hashedPassword, userID, walletID);
+    // initialize core managers with CSV paths
+    UserManager userManager(usersCSV);                          
+    WalletManager walletManager(walletsCSV, transactionsCSV);  
+    MarketDataLoader marketData(marketCSV);                    
 
-    // print info to show we loaded user
-    std::cout << "user: " << fullName << " | id: " << user.getUserID() << "\n";
+    // create menu with references to managers
+    Menu menu(userManager, walletManager, marketData);
 
-    // initialize trade simulator
-    TradeSimulator simulator(marketData, walletManager);
+    // start main loop
+    menu.run();
 
-    // run simulation for the test user
-    std::cout << "simulating trades...\n";
-    simulator.simulateTrades(user);
-
-    // reload wallet to show updated balances
-    std::cout << "loading wallet after trades...\n";
-    Wallet wallet = walletManager.loadWallet(user.getWalletID());
-    std::cout << wallet << "\n"; // 
-
-    // print recent transactions to confirm trades
-    std::cout << "recent transactions (last 5):\n";
-    std::vector<Transaction> recentTxs = walletManager.getRecentTransactions(user.getUserID(), 5);
-    for (const auto& tx : recentTxs)
-    {
-        std::cout << "[" << tx.timestamp << "] "
-                  << Transaction::typeToString(tx.type) << " "
-                  << tx.product << " "
-                  << tx.amount << " | balance after: " 
-                  << tx.balanceAfter << "\n";
-    }
-
-    // done
-    std::cout << "task 4 simulation test complete\n";
-    return 0;
+    return 0; // normally never reached
 }

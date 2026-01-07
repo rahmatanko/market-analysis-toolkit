@@ -21,6 +21,9 @@ public:
                    const std::string& password,
                    User& outUser);
 
+    // login by email
+    bool loginUserByEmail(const std::string& email, const std::string& password, User& outUser);
+
     // return all loaded users
     std::vector<User> getAllUsers() const;
 

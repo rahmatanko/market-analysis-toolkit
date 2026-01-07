@@ -1,6 +1,6 @@
 # compiler
 CXX = g++
-CXXFLAGS = -std=c++17 -g -Wall -I./core
+CXXFLAGS = -std=c++17 -g -O0 -Wall -fsanitize=address -fno-omit-frame-pointer -I./core -fsanitize=address,undefined
 
 # source files
 SRC = $(wildcard *.cpp) \
@@ -8,6 +8,7 @@ SRC = $(wildcard *.cpp) \
       $(wildcard market/*.cpp) \
       $(wildcard user/*.cpp) \
       $(wildcard trading/*.cpp) \
+      $(wildcard ui/*.cpp) \
       $(wildcard wallet/*.cpp)
 
 # build folder

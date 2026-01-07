@@ -7,13 +7,11 @@
 User::User(const std::string& fullName,
            const std::string& email,
            const std::string& hashedPassword,
-           const std::string& userID,
-           const std::string& walletID)
+           const std::string& userID)
     : fullName(fullName),
       email(email),
       hashedPassword(hashedPassword),
-      userID(userID),
-      walletID(walletID)
+      userID(userID)
 {
 }
 
@@ -22,9 +20,8 @@ std::string User::getUserID() const { return userID; }
 std::string User::getFullName() const { return fullName; }
 std::string User::getEmail() const { return email; }
 std::string User::getHashedPassword() const { return hashedPassword; }
-std::string User::getWalletID() const { return walletID; }
 
 // convert user fields to csv row
 std::vector<std::string> User::toCSVRow() const {
-    return {userID, fullName, email, hashedPassword, walletID};
+    return {userID, fullName, email, hashedPassword};
 }
